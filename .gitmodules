@@ -1,0 +1,3 @@
+[submodule "extern/Galois"]
+	path = extern/Galois
+	url = git@github.com:Kadle11/Galois.git
