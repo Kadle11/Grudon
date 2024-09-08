@@ -171,43 +171,45 @@ DistributedGraph::DistributedGraph(
 
     spdlog::info("[Proc {}] Distributed the vertices to all memory nodes", node_id);
 
-    galois::do_all(
-        galois::iterate(bgraph),
-        [&](GNode n)
-        {
-          MPI_Request vec_mpi_buffer = MPI_REQUEST_NULL;
-          MPI_Request edge_mpi_buffer = MPI_REQUEST_NULL;
-
-          std::vector<GNode> ebuffer;
-          vertexEdgeCount vecSend;
-          ebuffer.reserve(std::distance(bgraph.edge_begin(n), bgraph.edge_end(n)));
-          for (auto ii = bgraph.edge_begin(n), ei = bgraph.edge_end(n); ii != ei; ++ii)
+    /*
+      galois::do_all(
+          galois::iterate(bgraph),
+          [&](GNode n)
           {
-            ebuffer.push_back(bgraph.getEdgeDst(ii));
-          }
-          vecSend.vertex = n;
-          vecSend.edge_count = ebuffer.size();
+            MPI_Request vec_mpi_buffer = MPI_REQUEST_NULL;
+            MPI_Request edge_mpi_buffer = MPI_REQUEST_NULL;
 
-          spdlog::debug(
-              "[Proc {}] Sending vertex {} with {}/{} edges to memory node {}",
-              node_id,
-              vecSend.vertex,
-              vecSend.edge_count,
-              std::distance(bgraph.edge_begin(n), bgraph.edge_end(n)),
-              mirror_partition[n] + num_compute);
+            std::vector<GNode> ebuffer;
+            vertexEdgeCount vecSend;
+            ebuffer.reserve(std::distance(bgraph.edge_begin(n), bgraph.edge_end(n)));
+            for (auto ii = bgraph.edge_begin(n), ei = bgraph.edge_end(n); ii != ei; ++ii)
+            {
+              ebuffer.push_back(bgraph.getEdgeDst(ii));
+            }
+            vecSend.vertex = n;
+            vecSend.edge_count = ebuffer.size();
 
-          assert(vecSend.edge_count == std::distance(bgraph.edge_begin(n), bgraph.edge_end(n)));
+            spdlog::debug(
+                "[Proc {}] Sending vertex {} with {}/{} edges to memory node {}",
+                node_id,
+                vecSend.vertex,
+                vecSend.edge_count,
+                std::distance(bgraph.edge_begin(n), bgraph.edge_end(n)),
+                mirror_partition[n] + num_compute);
 
-          lock.lock();
-          net.isend(mirror_partition[n] + num_compute, 0, &vecSend, 1, vertexEdgeCountType, &vec_mpi_buffer);
-          net.isend(mirror_partition[n] + num_compute, 0, ebuffer.data(), ebuffer.size(), MPI_GNODE_T, &edge_mpi_buffer);
-          lock.unlock();
+            assert(vecSend.edge_count == std::distance(bgraph.edge_begin(n), bgraph.edge_end(n)));
 
-          ebuffer.clear();
-        },
-        galois::chunk_size<1024>(),
-        galois::loopname("Distribute Vertices to Mirrors"));
-    spdlog::info("[Proc {}] Distributed the edges to all memory nodes", node_id);
+            lock.lock();
+            net.send(mirror_partition[n] + num_compute, 0, &vecSend, 1, vertexEdgeCountType);
+            net.send(mirror_partition[n] + num_compute, 0, ebuffer.data(), ebuffer.size(), MPI_GNODE_T);
+            lock.unlock();
+
+            ebuffer.clear();
+          },
+          galois::chunk_size<1024>(),
+          galois::loopname("Distribute Vertices to Mirrors"));
+      spdlog::info("[Proc {}] Distributed the edges to all memory nodes", node_id);
+    */
   }
   else
   {
@@ -228,7 +230,6 @@ DistributedGraph::DistributedGraph(
 
     if (node_type == MEMORY_NODE)
     {
-      galois::substrate::SimpleLock lock;
       std::vector<GNode> vbuffer;
       std::vector<uint64_t> edge_ends_buffer;
       uint64_t ecount = 0;
@@ -251,77 +252,73 @@ DistributedGraph::DistributedGraph(
       uint64_t cur = 0;
       uint64_t vcount = num_vertices;
 
-      galois::do_all(
-          galois::iterate(uint64_t{ 0 }, num_vertices),
-          [&](uint64_t pv)
+      /*
+        vertexEdgeCount vec;
+        std::vector<GNode> ebuffer;
+        MPI_Request vec_mpi_buffer = MPI_REQUEST_NULL;
+        MPI_Request edge_mpi_buffer = MPI_REQUEST_NULL;
+
+        while (processedVertices != vcount)
+        {
+          net.recv(0, 0, &vec, 1, vertexEdgeCountType, MPI_STATUS_IGNORE);
+
+          currLVertex = gid_to_lid[vec.vertex];
+          ebuffer.resize(vec.edge_count);
+
+          spdlog::debug(
+              "[Proc {}] Receiving vertex {} with {}/{} edges from the coordinator",
+              node_id,
+              vec.vertex,
+              vec.edge_count,
+              ebuffer.size());
+
+          net.recv(0, 0, ebuffer.data(), vec.edge_count, MPI_GNODE_T, MPI_STATUS_IGNORE);
+
+          cur = *lgraph.edge_begin(currLVertex, galois::MethodFlag::UNPROTECTED);
+          for (GNode& dst : ebuffer)
           {
-            std::vector<GNode> ebuffer;
-            vertexEdgeCount vec;
+            lgraph.constructEdge(cur++, gid_to_lid[dst]);
+          }
 
-            MPI_Request vec_mpi_buffer = MPI_REQUEST_NULL;
-            MPI_Request edge_mpi_buffer = MPI_REQUEST_NULL;
+          spdlog::debug(
+              "[Proc {}] Processed {}/{} Edges for Vertex {}", node_id, cur, *lgraph.edge_end(currLVertex), vec.vertex);
+          assert(cur == *lgraph.edge_end(currLVertex));
 
-            lock.lock();
-            net.irecv(0, 0, &vec, 1, vertexEdgeCountType, &vec_mpi_buffer);
-            MPI_Wait(&vec_mpi_buffer, MPI_STATUS_IGNORE);
+          ebuffer.clear();
+          processedVertices++;
+        }
+        */
+      
+      galois::substrate::SimpleLock lock;
+      galois::graphs::readGraph(bgraph, graph_path);
+      spdlog::info("Read {} nodes and {} edges", bgraph.size(), bgraph.sizeEdges());
+      galois::do_all(
+          galois::iterate(lgraph),
+          [&](GNode n)
+          {
+            GNode gnode = vbuffer[n];
+            auto ii = bgraph.edge_begin(gnode);
+            auto ee = bgraph.edge_end(gnode);
 
-            currLVertex = gid_to_lid[vec.vertex];
-            ebuffer.resize(vec.edge_count);
-
-            net.irecv(0, 0, ebuffer.data(), vec.edge_count, MPI_GNODE_T, &edge_mpi_buffer);
-            MPI_Wait(&edge_mpi_buffer, MPI_STATUS_IGNORE);
-            lock.unlock();
-
-            cur = *lgraph.edge_begin(currLVertex, galois::MethodFlag::UNPROTECTED);
-            for (GNode& dst : ebuffer)
+            uint64_t cur = *lgraph.edge_begin(n, galois::MethodFlag::UNPROTECTED);
+            for (; ii < ee; ++ii)
             {
+              GNode dst = bgraph.getEdgeDst(ii);
               if (gid_to_lid.find(dst) == gid_to_lid.end())
               {
+                lock.lock();
                 gid_to_lid[dst] = num_vertices++;
+                lock.unlock();
               }
               lgraph.constructEdge(cur++, gid_to_lid[dst]);
             }
+            spdlog::debug("[Proc {}] Processed {}/{} Edges for Vertex {}", node_id, cur, *lgraph.edge_end(n), gnode);
+            assert(cur == *lgraph.edge_end(n));
+          },
+          galois::loopname("Distribute Vertices to Mirrors"));
 
-            ebuffer.clear();
-          });
+      bgraph.deallocate();
 
-      /*
-            while (processedVertices != vcount)
-            {
-              net.irecv(0, 0, &vec, 1, vertexEdgeCountType, &vec_mpi_buffer);
-              MPI_Wait(&vec_mpi_buffer, MPI_STATUS_IGNORE);
-
-              currLVertex = gid_to_lid[vec.vertex];
-              ebuffer.resize(vec.edge_count);
-
-              spdlog::debug(
-                  "[Proc {}] Receiving vertex {} with {}/{} edges from the coordinator",
-                  node_id,
-                  vec.vertex,
-                  vec.edge_count,
-                  ebuffer.size());
-
-              net.irecv(0, 0, ebuffer.data(), vec.edge_count, MPI_GNODE_T, &edge_mpi_buffer);
-              MPI_Wait(&edge_mpi_buffer, MPI_STATUS_IGNORE);
-
-              cur = *lgraph.edge_begin(currLVertex, galois::MethodFlag::UNPROTECTED);
-              for (GNode& dst : ebuffer)
-              {
-                if (gid_to_lid.find(dst) == gid_to_lid.end())
-                {
-                  gid_to_lid[dst] = num_vertices++;
-                }
-                lgraph.constructEdge(cur++, gid_to_lid[dst]);
-              }
-
-              spdlog::debug(
-                  "[Proc {}] Processed {}/{} Edges for Vertex {}", node_id, cur, *lgraph.edge_end(currLVertex), vec.vertex);
-              assert(cur == *lgraph.edge_end(currLVertex));
-
-              ebuffer.clear();
-              processedVertices++;
-            }
-       */
       spdlog::debug("[Proc {}] Received the vertices/edges from the coordinator", node_id);
     }
   }
@@ -331,6 +328,18 @@ DistributedGraph::DistributedGraph(
   if (node_type == MEMORY_NODE)
   {
     spdlog::info("[Proc {}] Graph has {} vertices and {} edges", node_id, lgraph.size(), lgraph.sizeEdges());
+    // Print Edges
+    galois::do_all(
+        galois::iterate(lgraph),
+        [&](GNode n)
+        {
+          for (auto ii = lgraph.edge_begin(n), ei = lgraph.edge_end(n); ii != ei; ++ii)
+          {
+            GNode dst = lgraph.getEdgeDst(ii);
+            spdlog::debug("[Proc {}] Edge {} -> {}", node_id, n, dst);
+          }
+        },
+        galois::loopname("Print Local Graph"));
   }
   if (node_type == COMPUTE_NODE)
   {

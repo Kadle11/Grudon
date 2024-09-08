@@ -18,7 +18,7 @@
 #include <galois/substrate/SimpleLock.h>
 
 #include <boost/iterator/counting_iterator.hpp>
-#include <map>
+#include <unordered_map>
 #include <string>
 #include <vector>
 
@@ -166,7 +166,7 @@ class DistributedGraph
 
   Graph lgraph;
   uint64_t num_edges;
-  std::map<GNode, GNode> gid_to_lid;
+  std::unordered_map<GNode, GNode> gid_to_lid;
 };
 
 #endif  // DISTRIBUTEDGRAPH_HPP
