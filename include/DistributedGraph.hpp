@@ -18,8 +18,8 @@
 #include <galois/substrate/SimpleLock.h>
 
 #include <boost/iterator/counting_iterator.hpp>
-#include <unordered_map>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "Graph.hpp"
@@ -145,6 +145,15 @@ class DistributedGraph
       MPICore& net);
   ~DistributedGraph();
 
+  bool isCoverageComplete(std::vector<GNode>& frontier);
+  
+  GNode getLocalNode(GNode& gid);
+  GNode getGlobalNode(GNode& lid);
+  uint64_t getOutDegree(GNode& lid);
+
+  uint64_t getMirrorPartition(GNode& gid);
+  uint64_t getMasterPartition(GNode& gid);
+
  private:
   size_t& num_compute;
   size_t& num_memory;
@@ -167,6 +176,9 @@ class DistributedGraph
   Graph lgraph;
   uint64_t num_edges;
   std::unordered_map<GNode, GNode> gid_to_lid;
+  std::unordered_map<GNode, GNode> lid_to_gid;
+  galois::LargeArray<bool> coverage_vector;
+  galois::LargeArray<uint64_t> out_degrees;
 };
 
 #endif  // DISTRIBUTEDGRAPH_HPP
