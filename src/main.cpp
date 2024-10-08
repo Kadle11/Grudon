@@ -6,7 +6,10 @@
 
 #include "DistributedGraph.hpp"
 #include "Graph.hpp"
+#include "GraphAlgorithm.hpp"
 #include "MPI.hpp"
+#include "Workers.hpp"
+#include "graph_algorithms/pr.hpp"
 
 int main(int argc, char **argv)
 {
@@ -82,6 +85,11 @@ int main(int argc, char **argv)
 
   std::vector<galois::DynamicBitSet> bitCommVector;
   std::vector<galois::LargeArray<GNode>> addrTranslationTable;
+  galois::LargeArray<uint64_t> out_degrees;
+  galois::LargeArray<bool> coverage_vector;
+  uint64_t num_vertices = 0;
+  uint64_t total_vertices = 0;
+  uint64_t num_edges = 0;
 
   if (node_id == 0)
   {
@@ -94,7 +102,30 @@ int main(int argc, char **argv)
     spdlog::info("Number of Threads: {}", num_threads);
   }
 
-  uint64_t num_vertices = 0;
-  DistributedGraph dgraph(
-      graph_path, num_compute, num_memory, num_vertices, node_id, node_type, bitCommVector, addrTranslationTable, net);
+  /*
+    DistributedGraph distributed_graph(
+        graph_path,
+        num_compute,
+        num_memory,
+        num_vertices,
+        total_vertices,
+        num_edges,
+        node_id,
+        node_type,
+        bitCommVector,
+        addrTranslationTable,
+        out_degrees,
+        coverage_vector,
+        net);
+  */
+
+  GraphAlgorithm<double> *pr = new PageRank<double>(node_type, "PageRank", graph_path, num_compute, num_memory, node_id, net);
+
+  pr->init();
+  pr->run();
+  pr->printState();
+
+  delete pr;
+
+  return 0;
 }

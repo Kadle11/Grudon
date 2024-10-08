@@ -18,11 +18,13 @@
 #include <galois/substrate/SimpleLock.h>
 
 #include <boost/iterator/counting_iterator.hpp>
+#include <set>
 #include <string>
 #include <unordered_map>
 #include <vector>
 
 #include "Graph.hpp"
+#include "Logger.hpp"
 #include "MPI.hpp"
 
 using Graph = galois::graphs::LC_CSR_Graph<uint64_t, uint32_t>::with_no_lockable<true>::type;
@@ -35,11 +37,38 @@ struct dataElement : public galois::runtime::Lockable
   using reference = T&;
 
   T v;
-  bool updated;
 
   reference getData()
   {
     return v;
+  }
+};
+
+struct ThreadSafeSet
+{
+  std::set<GNode> set;
+  std::mutex mtx;
+
+  const std::set<GNode>& get()
+  {
+    return set;
+  }
+
+  void clear()
+  {
+    std::lock_guard<std::mutex> lock(mtx);
+    set.clear();
+  }
+
+  void insert(const GNode& n)
+  {
+    std::lock_guard<std::mutex> lock(mtx);
+    set.insert(n);
+  }
+
+  size_t size()
+  {
+    return set.size();
   }
 };
 
@@ -65,45 +94,64 @@ struct PropertyList
   {
     acquireNode(n);
     data[n].v = std::min(data[n].v, val);
-    data[n].updated = true;
+    updated_vertices.insert(n);
   }
 
   void maxUpdate(const GNode& n, const T& val)
   {
     acquireNode(n);
     data[n].v = std::max(data[n].v, val);
-    data[n].updated = true;
+    updated_vertices.insert(n);
   }
 
   void addUpdate(const GNode& n, const T& val)
   {
     acquireNode(n);
     data[n].v += val;
-    data[n].updated = true;
+    updated_vertices.insert(n);
   }
 
-  void setUpdate(const GNode& n, const T& val)
+  void set(const GNode& n, const T& val)
   {
     acquireNode(n);
     data[n].v = val;
-    data[n].updated = true;
+    updated_vertices.insert(n);
   }
 
-  void resetUpdate(const GNode& n)
+  void clear()
   {
-    acquireNode(n);
-    data[n].updated = false;
+    galois::do_all(
+        galois::iterate(updated_vertices.set.begin(), updated_vertices.set.end()),
+        [&](const GNode& n)
+        {
+          acquireNode(n);
+          data[n].v = 0;
+        },
+        galois::loopname("Clear Updated Vertices"),
+        galois::no_stats(),
+        galois::steal());
+
+    updated_vertices.clear();
   }
 
-  bool isUpdated(const GNode& n)
+  void clear_uv()
   {
-    acquireNode(n, galois::MethodFlag::READ);
-    return data[n].updated;
+    updated_vertices.clear();
+  }
+
+  size_t uv_size()
+  {
+    return updated_vertices.size();
   }
 
   void allocate(size_t size)
   {
     data.allocateInterleaved(size);
+  }
+
+  void addUpdatedVertex(const GNode& n)
+  {
+    updated_vertices.insert(n);
   }
 
   using iterator = boost::counting_iterator<GNode>;
@@ -121,14 +169,25 @@ struct PropertyList
     return data.size();
   }
 
- private:
-  galois::LargeArray<dataElement<T>> data;
+  const std::set<GNode>& getUpdatedVertices()
+  {
+    return updated_vertices.get();
+  }
+
   void acquireNode(const GNode& node, galois::MethodFlag mflag = galois::MethodFlag::WRITE)
   {
     assert(node < data.size());
     galois::runtime::acquire(&data[node], mflag);
   }
+
+  galois::LargeArray<dataElement<T>> data;
+  ThreadSafeSet updated_vertices;
 };
+
+// Explicit Instantiation
+template class PropertyList<float>;
+template class PropertyList<double>;
+template class PropertyList<uint64_t>;
 
 class DistributedGraph
 {
@@ -138,26 +197,41 @@ class DistributedGraph
       size_t& num_compute,
       size_t& num_memory,
       uint64_t& num_vertices,
+      uint64_t& total_vertices,
+      uint64_t& num_edges,
       uint32_t& node_id,
       NODE_TYPE& node_type,
       std::vector<galois::DynamicBitSet>& bitCommVector,
       std::vector<galois::LargeArray<GNode>>& addrTranslationTable,
+      galois::LargeArray<uint64_t>& out_degrees,
+      galois::LargeArray<bool>& coverage_vector,
       MPICore& net);
   ~DistributedGraph();
 
   bool isCoverageComplete(std::vector<GNode>& frontier);
-  
+
   GNode getLocalNode(GNode& gid);
   GNode getGlobalNode(GNode& lid);
   uint64_t getOutDegree(GNode& lid);
 
-  uint64_t getMirrorPartition(GNode& gid);
-  uint64_t getMasterPartition(GNode& gid);
+  uint64_t getMirrorPartition(const GNode& gid);
+  uint64_t getMasterPartition(const GNode& gid);
+
+  void printState();
+
+  uint64_t getNumVertices()
+  {
+    return num_vertices;
+  }
+
+  Graph lgraph;
 
  private:
   size_t& num_compute;
   size_t& num_memory;
   uint64_t& num_vertices;
+  uint64_t& total_vertices;
+  uint64_t& num_edges;
   uint32_t& node_id;
   NODE_TYPE& node_type;
 
@@ -173,12 +247,10 @@ class DistributedGraph
 
   MPICore& net;
 
-  Graph lgraph;
-  uint64_t num_edges;
   std::unordered_map<GNode, GNode> gid_to_lid;
   std::unordered_map<GNode, GNode> lid_to_gid;
-  galois::LargeArray<bool> coverage_vector;
-  galois::LargeArray<uint64_t> out_degrees;
+  galois::LargeArray<bool>& coverage_vector;
+  galois::LargeArray<uint64_t>& out_degrees;
 };
 
 #endif  // DISTRIBUTEDGRAPH_HPP

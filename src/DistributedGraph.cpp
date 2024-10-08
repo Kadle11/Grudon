@@ -15,10 +15,14 @@ DistributedGraph::DistributedGraph(
     size_t& num_compute,
     size_t& num_memory,
     uint64_t& num_vertices,
+    uint64_t& total_vertices,
+    uint64_t& num_edges,
     uint32_t& node_id,
     NODE_TYPE& node_type,
     std::vector<galois::DynamicBitSet>& bitCommVector,
     std::vector<galois::LargeArray<GNode>>& addrTranslationTable,
+    galois::LargeArray<uint64_t>& out_degrees,
+    galois::LargeArray<bool>& coverage_vector,
     MPICore& net)
     : num_compute(num_compute),
       num_memory(num_memory),
@@ -26,7 +30,11 @@ DistributedGraph::DistributedGraph(
       node_type(node_type),
       bitCommVector(bitCommVector),
       addrTranslationTable(addrTranslationTable),
+      out_degrees(out_degrees),
+      coverage_vector(coverage_vector),
       num_vertices(num_vertices),
+      total_vertices(total_vertices),
+      num_edges(num_edges),
       net(net)
 {
   // spdlog::set_level(spdlog::level::debug);
@@ -42,7 +50,6 @@ DistributedGraph::DistributedGraph(
     // Partition the Graph
     master_partition_sizes.resize(num_compute, 0);
     mirror_partition_sizes.resize(num_memory, 0);
-
     mirror_edge_counts.resize(num_memory, 0);
 
     NaivePartitioner(
@@ -59,8 +66,8 @@ DistributedGraph::DistributedGraph(
   }
 
   // Distribute the number of vertices to all nodes
-  uint64_t num_edges = 0;
-  uint64_t total_vertices = 0;
+  num_edges = 0;
+  total_vertices = 0;
   if (node_id == 0)
   {
     total_vertices = bgraph.size();
@@ -111,6 +118,15 @@ DistributedGraph::DistributedGraph(
   net.barrier();
   lgraph.allocateFrom(num_vertices, num_edges);
   lgraph.constructNodes();
+
+  if (node_type == COMPUTE_NODE)
+  {
+    coverage_vector.allocateLocal(num_vertices);
+    out_degrees.allocateLocal(num_vertices);
+  }
+
+  // Create the Address Translation Table
+  std::vector<uint64_t> translationTableSizes(num_compute, 0);
 
   // MPI data type for vertexEdgeCount
   MPI_Datatype vertexEdgeCountType;
@@ -262,9 +278,6 @@ DistributedGraph::DistributedGraph(
       out_degree_vectors[i].allocateLocal(master_partition_sizes[i]);
     }
 
-    out_degrees.allocateLocal(num_vertices);
-    coverage_vector.allocateLocal(num_vertices);
-
     // Initialize the Coverage Vector and Out Degree Vector
     galois::do_all(
         galois::iterate(uint64_t(0), num_vertices),
@@ -327,6 +340,9 @@ DistributedGraph::DistributedGraph(
         },
         galois::loopname("Coverage Vector and Out Degree Vector"));
 
+    spdlog::debug(
+        "[Proc {}] Coverage vector: {}, Out Degree vector: {}", node_id, fmt_array(coverage_vector), fmt_array(out_degrees));
+
     // Send the Coverage Vectors and Out Degree Vectors
     for (int i = 1; i < num_compute; i++)
     {
@@ -354,12 +370,14 @@ DistributedGraph::DistributedGraph(
       }
       spdlog::debug("[Proc {}] Received vertices {}", node_id, fmt_array(vbuffer));
 
-      coverage_vector.allocateLocal(num_vertices);
-      out_degrees.allocateLocal(num_vertices);
-
       net.recv(0, 0, coverage_vector.data(), num_vertices, MPI_CXX_BOOL, MPI_STATUS_IGNORE);
       net.recv(0, 0, out_degrees.data(), num_vertices, MPI_UINT64_T, MPI_STATUS_IGNORE);
 
+      spdlog::debug(
+          "[Proc {}] Coverage vector: {}, Out Degree vector: {}",
+          node_id,
+          fmt_array(coverage_vector),
+          fmt_array(out_degrees));
       spdlog::info("[Proc {}] Received the coverage vector and out degree vectors", node_id);
     }
 
@@ -374,12 +392,15 @@ DistributedGraph::DistributedGraph(
 
       net.recv(0, 0, vbuffer.data(), num_vertices, MPI_GNODE_T, MPI_STATUS_IGNORE);
       net.recv(0, 0, edge_ends_buffer.data(), num_vertices, MPI_UINT64_T, MPI_STATUS_IGNORE);
+
       for (uint64_t i = 0; i < num_vertices; i++)
       {
         gid_to_lid[vbuffer[i]] = i;
         lid_to_gid[i] = vbuffer[i];
         ecount += edge_ends_buffer[i];
         lgraph.fixEndEdge(i, ecount);
+
+        translationTableSizes[master_partition[vbuffer[i]]]++;
       }
       spdlog::debug("[Proc {}] Received vertices {}", node_id, fmt_array(vbuffer));
 
@@ -427,7 +448,7 @@ DistributedGraph::DistributedGraph(
 
       galois::substrate::SimpleLock lock;
       galois::graphs::readGraph(bgraph, graph_path);
-      spdlog::info("Read {} nodes and {} edges", bgraph.size(), bgraph.sizeEdges());
+      spdlog::info("[Proc{}] Read {} nodes and {} edges", node_id, bgraph.size(), bgraph.sizeEdges());
       galois::do_all(
           galois::iterate(lgraph),
           [&](GNode n)
@@ -440,15 +461,16 @@ DistributedGraph::DistributedGraph(
             for (; ii < ee; ++ii)
             {
               GNode dst = bgraph.getEdgeDst(ii);
+              lock.lock();
               if (gid_to_lid.find(dst) == gid_to_lid.end())
               {
-                lock.lock();
+                spdlog::debug("[Proc {}] Adding Vertex Mapping {} --> {}", node_id, num_vertices, dst);
                 lid_to_gid[num_vertices] = dst;
                 gid_to_lid[dst] = num_vertices++;
-                master_partition_sizes[master_partition[dst]]++;  // Account for the additional mirrors
-                lock.unlock();
+                translationTableSizes[master_partition[dst]]++;  // Account for the additional mirrors
               }
               lgraph.constructEdge(cur++, gid_to_lid[dst]);
+              lock.unlock();
             }
             spdlog::debug("[Proc {}] Processed {}/{} Edges for Vertex {}", node_id, cur, *lgraph.edge_end(n), gnode);
             assert(cur == *lgraph.edge_end(n));
@@ -484,31 +506,31 @@ DistributedGraph::DistributedGraph(
     spdlog::info("[Proc {}] Graph has {} vertices", node_id, lgraph.size());
   }
 
-  // TODO: Validate Address Translation Table
   if (node_type == MEMORY_NODE)
   {
     addrTranslationTable.resize(num_compute);
-    std::vector<uint64_t> addrTranslationTableSizes(num_compute, 0);
+    std::vector<uint64_t> addrTranslationTableIdxs(num_compute, 0);
     for (int i = 0; i < num_compute; i++)
     {
-      addrTranslationTable[i].allocateLocal(master_partition_sizes[i]);
+      addrTranslationTable[i].allocateLocal(translationTableSizes[i]);
     }
 
-    galois::substrate::SimpleLock lock;
-    galois::do_all(
-        galois::iterate(uint64_t(0), num_vertices),
-        [&](uint64_t n)
-        {
-          GNode gid = lid_to_gid[n];
-          uint64_t masterID = master_partition[gid];
-          addrTranslationTable[masterID][addrTranslationTableSizes[masterID]] = n;
+    for (GNode lnode = 0; lnode < num_vertices; ++lnode)
+    {
+      GNode gnode = lid_to_gid[lnode];
+      uint64_t masterID = master_partition[gnode];
+      addrTranslationTable[masterID][addrTranslationTableIdxs[masterID]] = lnode;
+      addrTranslationTableIdxs[masterID]++;
 
-          lock.lock();
-          addrTranslationTableSizes[masterID]++;
-          lock.unlock();
-        },
-        galois::loopname("Memory Node: Create Address Translation Table"));
-    addrTranslationTableSizes.clear();
+      spdlog::info(
+          "[Proc {}] Mapping Global Node {} to Local Node {} in Compute Node {}",
+          node_id,
+          gnode,
+          lnode,
+          masterID);
+    }
+
+    addrTranslationTableIdxs.clear();
   }
   else if (node_type == COMPUTE_NODE)
   {
@@ -519,21 +541,13 @@ DistributedGraph::DistributedGraph(
       addrTranslationTable[i].allocateLocal(mirror_partition_sizes[i]);
     }
 
-    galois::substrate::SimpleLock lock;
-    galois::do_all(
-        galois::iterate(uint64_t(0), num_vertices),
-        [&](uint64_t n)
-        {
-          GNode gid = lid_to_gid[n];
-          uint64_t mirrorID = mirror_partition[gid];
-          addrTranslationTable[mirrorID][addrTranslationTableSizes[mirrorID]] = n;
-
-          lock.lock();
-          addrTranslationTableSizes[mirrorID]++;
-          lock.unlock();
-          spdlog::debug("[Proc {}] Adding Vertex {} to Translation Table/Mirror {}", node_id, n, mirrorID);
-        },
-        galois::loopname("Compute Node: Create Address Translation Table"));
+    for (GNode lnode = 0; lnode < num_vertices; ++lnode)
+    {
+      GNode gnode = lid_to_gid[lnode];
+      uint64_t mirrorID = mirror_partition[gnode];
+      addrTranslationTable[mirrorID][addrTranslationTableSizes[mirrorID]] = lnode;
+      addrTranslationTableSizes[mirrorID]++;
+    }
 
     addrTranslationTableSizes.clear();
   }
@@ -589,16 +603,53 @@ uint64_t DistributedGraph::getOutDegree(GNode& lid)
   return out_degrees[lid];
 }
 
-uint64_t DistributedGraph::getMirrorPartition(GNode& gid)
+uint64_t DistributedGraph::getMirrorPartition(const GNode& gid)
 {
   return mirror_partition[gid];
 }
 
-uint64_t DistributedGraph::getMasterPartition(GNode& gid)
+uint64_t DistributedGraph::getMasterPartition(const GNode& gid)
 {
   return master_partition[gid];
 }
 
 DistributedGraph::~DistributedGraph()
 {
+}
+
+void DistributedGraph::printState()
+{
+  if (node_type == COMPUTE_NODE)
+  {
+    spdlog::info("[Proc {}] Node Type: Compute Node", node_id);
+  }
+  else if (node_type == MEMORY_NODE)
+  {
+    spdlog::info("[Proc {}] Node Type: Memory Node", node_id);
+  }
+  spdlog::info("[Proc {}] Number of Vertices: {}", node_id, num_vertices);
+  spdlog::info("[Proc {}] Number of Compute Nodes: {}", node_id, num_compute);
+  spdlog::info("[Proc {}] Number of Memory Nodes: {}", node_id, num_memory);
+  spdlog::info("[Proc {}] Master Partition Sizes: {}", node_id, fmt_array(master_partition_sizes));
+  spdlog::info("[Proc {}] Mirror Partition Sizes: {}", node_id, fmt_array(mirror_partition_sizes));
+
+  spdlog::info("[Proc {}] Master Partition: {}", node_id, fmt_array(master_partition));
+  spdlog::info("[Proc {}] Mirror Partition: {}", node_id, fmt_array(mirror_partition));
+
+  spdlog::info("[Proc {}] Address Translation Table: ", node_id);
+
+  if (node_type == MEMORY_NODE)
+  {
+    for (int i = 0; i < addrTranslationTable.size(); i++)
+    {
+      spdlog::info("[Proc {}] Compute Node {}: {}", node_id, i, fmt_array(addrTranslationTable[i]));
+    }
+  }
+  else if (node_type == COMPUTE_NODE)
+  {
+    for (int i = 0; i < addrTranslationTable.size(); i++)
+    {
+      spdlog::info("[Proc {}] Memory Node {}: {}", node_id, i, fmt_array(addrTranslationTable[i]));
+    }
+  }
 }

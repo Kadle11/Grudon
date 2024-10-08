@@ -1,5 +1,8 @@
 set(sources
 		src/DistributedGraph.cpp
+		src/Workers.cpp
+		src/GraphAlgorithm.cpp
+		src/graph_algorithms/pr.cpp
 )
 
 set(exe_sources
@@ -13,4 +16,7 @@ set(headers
 	include/Graph.hpp
 	include/MPI.hpp
 	include/Logger.hpp
+	include/Workers.hpp
+	include/GraphAlgorithm.hpp
+	include/graph_algorithms/pr.hpp
 )	
