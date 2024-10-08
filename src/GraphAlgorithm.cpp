@@ -21,20 +21,24 @@ GraphAlgorithm<VertexProperty>::GraphAlgorithm(
   if (node_type == COMPUTE_NODE)
   {
     worker = new UpdateWorker<VertexProperty>(graph_path, num_compute, num_memory, node_id, node_type, net);
+    propertyBuffers.resize(num_memory);
+    for (int i = 0; i < num_memory; i++)
+    {
+      propertyBuffers[i].allocateLocal(worker->addrTranslationTable[i].size());
+    }
   }
   else if (node_type == MEMORY_NODE)
   {
     worker = new TraverseWorker<VertexProperty>(graph_path, num_compute, num_memory, node_id, node_type, net);
+    propertyBuffers.resize(num_compute);
+    for (int i = 0; i < num_compute; i++)
+    {
+      propertyBuffers[i].allocateLocal(worker->addrTranslationTable[i].size());
+    }
   }
 
   worker_completion_count = 0;
   num_workers = num_compute + num_memory;
-
-  propertyBuffers.resize(num_workers);
-  for (int i = 0; i < num_workers; i++)
-  {
-    propertyBuffers[i].allocateLocal(worker->addrTranslationTable[i].size());
-  }
 
   frontier.reserve(worker->num_vertices);
   vertex_properties.allocate(worker->num_vertices);
