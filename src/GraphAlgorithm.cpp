@@ -160,7 +160,7 @@ void GraphAlgorithm<VertexProperty>::run()
     {
       worker->traverse(*this);
 
-      const std::set<GNode> &updated_vertices = vertex_updates.getUpdatedVertices();
+      const galois::ThreadSafeOrderedSet<GNode> &updated_vertices = vertex_updates.getUpdatedVertices();
       spdlog::debug("[Proc {}] Updated Vertices: {}", this->worker->node_id, fmt_array(updated_vertices));
 
       for (const GNode &lid : updated_vertices)

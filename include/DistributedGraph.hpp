@@ -15,14 +15,15 @@
  * 7. Conditional Message Passing depending on Sparse/Dense Communication
  */
 
+#include <galois/PriorityQueue.h>
 #include <galois/substrate/SimpleLock.h>
 
 #include <boost/iterator/counting_iterator.hpp>
 #include <set>
+#include <shared_mutex>
 #include <string>
 #include <unordered_map>
 #include <vector>
-#include <shared_mutex>
 
 #include "Graph.hpp"
 #include "Logger.hpp"
@@ -42,34 +43,6 @@ struct dataElement : public galois::runtime::Lockable
   reference getData()
   {
     return v;
-  }
-};
-
-struct ThreadSafeSet
-{
-  std::set<GNode> set;
-  std::mutex mtx;
-
-  const std::set<GNode>& get()
-  {
-    return set;
-  }
-
-  void clear()
-  {
-    std::lock_guard<std::mutex> lock(mtx);
-    set.clear();
-  }
-
-  void insert(const GNode& n)
-  {
-    std::lock_guard<std::mutex> lock(mtx);
-    set.insert(n);
-  }
-
-  size_t size()
-  {
-    return set.size();
   }
 };
 
@@ -93,36 +66,40 @@ struct PropertyList
 
   void minUpdate(const GNode& n, const T& val)
   {
+    updated_vertices.insert(n);
+
     std::unique_lock<std::shared_mutex> lock(locks[n]);
     data[n].v = std::min(data[n].v, val);
-    updated_vertices.insert(n);
   }
 
   void maxUpdate(const GNode& n, const T& val)
   {
+    updated_vertices.insert(n);
+
     std::unique_lock<std::shared_mutex> lock(locks[n]);
     data[n].v = std::max(data[n].v, val);
-    updated_vertices.insert(n);
   }
 
   void addUpdate(const GNode& n, const T& val)
   {
+    updated_vertices.insert(n);
+
     std::unique_lock<std::shared_mutex> lock(locks[n]);
     data[n].v += val;
-    updated_vertices.insert(n);
   }
 
   void set(const GNode& n, const T& val)
   {
+    updated_vertices.insert(n);
+
     std::unique_lock<std::shared_mutex> lock(locks[n]);
     data[n].v = val;
-    updated_vertices.insert(n);
   }
 
   void clear()
   {
     galois::do_all(
-        galois::iterate(updated_vertices.set.begin(), updated_vertices.set.end()),
+        galois::iterate(updated_vertices.begin(), updated_vertices.end()),
         [&](const GNode& n)
         {
           std::unique_lock<std::shared_mutex> lock(locks[n]);
@@ -149,6 +126,8 @@ struct PropertyList
   {
     data.allocateInterleaved(size);
     locks = std::vector<std::shared_mutex>(size);
+
+    updated_vertices = galois::ThreadSafeOrderedSet<GNode>();
   }
 
   void addUpdatedVertex(const GNode& n)
@@ -171,13 +150,13 @@ struct PropertyList
     return data.size();
   }
 
-  const std::set<GNode>& getUpdatedVertices()
+  galois::ThreadSafeOrderedSet<GNode>& getUpdatedVertices()
   {
-    return updated_vertices.get();
+    return updated_vertices;
   }
 
   galois::LargeArray<dataElement<T>> data;
-  ThreadSafeSet updated_vertices;
+  galois::ThreadSafeOrderedSet<GNode> updated_vertices;
   std::vector<std::shared_mutex> locks;
 };
 
