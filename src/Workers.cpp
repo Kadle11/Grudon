@@ -26,10 +26,13 @@ Worker<T>::Worker(
       node_id,
       node_type,
       bitCommVector,
-      addrTranslationTable,
+      sTranslationTable,
+      rTranslationTable,
       out_degrees,
       coverage_vector,
       net);
+
+  // distributed_graph->printGraph();
 }
 
 template<typename T>

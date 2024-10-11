@@ -84,7 +84,8 @@ int main(int argc, char **argv)
   NODE_TYPE node_type = (node_id < num_compute) ? COMPUTE_NODE : MEMORY_NODE;
 
   std::vector<galois::DynamicBitSet> bitCommVector;
-  std::vector<galois::LargeArray<GNode>> addrTranslationTable;
+  std::vector<std::unordered_map<GNode, GNode>> rTranslationTable;
+  std::vector<std::unordered_map<GNode, GNode>> sTranslationTable;
   galois::LargeArray<uint64_t> out_degrees;
   galois::LargeArray<bool> coverage_vector;
   uint64_t num_vertices = 0;
@@ -94,7 +95,7 @@ int main(int argc, char **argv)
   if (node_id == 0)
   {
     // Log Configuration
-    spdlog::set_pattern("[%Y-%m-%d %H:%M:%S.%e] [%l] %v");
+    spdlog::set_pattern("[%Y-%m-%d %H:%M:%S.%e] [%l] %v ");
     spdlog::set_level(spdlog::level::info);
     spdlog::info("Graph Path: {}", graph_path);
     spdlog::info("Number of Compute Nodes: {}", num_compute);
@@ -102,28 +103,30 @@ int main(int argc, char **argv)
     spdlog::info("Number of Threads: {}", num_threads);
   }
 
-  /*
-    DistributedGraph distributed_graph(
-        graph_path,
-        num_compute,
-        num_memory,
-        num_vertices,
-        total_vertices,
-        num_edges,
-        node_id,
-        node_type,
-        bitCommVector,
-        addrTranslationTable,
-        out_degrees,
-        coverage_vector,
-        net);
-  */
+  // DistributedGraph distributed_graph(
+  //     graph_path,
+  //     num_compute,
+  //     num_memory,
+  //     num_vertices,
+  //     total_vertices,
+  //     num_edges,
+  //     node_id,
+  //     node_type,
+  //     bitCommVector,
+  //     sTranslationTable,
+  //     rTranslationTable,
+  //     out_degrees,
+  //     coverage_vector,
+  //     net);
 
-  GraphAlgorithm<double> *pr = new PageRank<double>(node_type, "PageRank", graph_path, num_compute, num_memory, node_id, net);
+  // distributed_graph.printState();
+
+  GraphAlgorithm<double> *pr = new PageRank<double>(node_type, "PageRank", graph_path, num_compute, num_memory, node_id,
+  net);
 
   pr->init();
   pr->run();
-  pr->printState();
+  // pr->printState();
 
   delete pr;
 

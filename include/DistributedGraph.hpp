@@ -22,6 +22,7 @@
 #include <string>
 #include <unordered_map>
 #include <vector>
+#include <shared_mutex>
 
 #include "Graph.hpp"
 #include "Logger.hpp"
@@ -80,40 +81,40 @@ struct PropertyList
 
   typename dataElement<T>::reference operator[](const GNode& n)
   {
-    acquireNode(n, galois::MethodFlag::WRITE);
+    std::unique_lock<std::shared_mutex> lock(locks[n]);
     return data[n].getData();
   }
 
   typename dataElement<T>::reference getData(const GNode& n, galois::MethodFlag mflag = galois::MethodFlag::READ)
   {
-    acquireNode(n, mflag);
+    std::shared_lock<std::shared_mutex> lock(locks[n]);
     return data[n].getData();
   }
 
   void minUpdate(const GNode& n, const T& val)
   {
-    acquireNode(n);
+    std::unique_lock<std::shared_mutex> lock(locks[n]);
     data[n].v = std::min(data[n].v, val);
     updated_vertices.insert(n);
   }
 
   void maxUpdate(const GNode& n, const T& val)
   {
-    acquireNode(n);
+    std::unique_lock<std::shared_mutex> lock(locks[n]);
     data[n].v = std::max(data[n].v, val);
     updated_vertices.insert(n);
   }
 
   void addUpdate(const GNode& n, const T& val)
   {
-    acquireNode(n);
+    std::unique_lock<std::shared_mutex> lock(locks[n]);
     data[n].v += val;
     updated_vertices.insert(n);
   }
 
   void set(const GNode& n, const T& val)
   {
-    acquireNode(n);
+    std::unique_lock<std::shared_mutex> lock(locks[n]);
     data[n].v = val;
     updated_vertices.insert(n);
   }
@@ -124,7 +125,7 @@ struct PropertyList
         galois::iterate(updated_vertices.set.begin(), updated_vertices.set.end()),
         [&](const GNode& n)
         {
-          acquireNode(n);
+          std::unique_lock<std::shared_mutex> lock(locks[n]);
           data[n].v = 0;
         },
         galois::loopname("Clear Updated Vertices"),
@@ -147,6 +148,7 @@ struct PropertyList
   void allocate(size_t size)
   {
     data.allocateInterleaved(size);
+    locks = std::vector<std::shared_mutex>(size);
   }
 
   void addUpdatedVertex(const GNode& n)
@@ -174,14 +176,9 @@ struct PropertyList
     return updated_vertices.get();
   }
 
-  void acquireNode(const GNode& node, galois::MethodFlag mflag = galois::MethodFlag::WRITE)
-  {
-    assert(node < data.size());
-    galois::runtime::acquire(&data[node], mflag);
-  }
-
   galois::LargeArray<dataElement<T>> data;
   ThreadSafeSet updated_vertices;
+  std::vector<std::shared_mutex> locks;
 };
 
 // Explicit Instantiation
@@ -202,7 +199,8 @@ class DistributedGraph
       uint32_t& node_id,
       NODE_TYPE& node_type,
       std::vector<galois::DynamicBitSet>& bitCommVector,
-      std::vector<galois::LargeArray<GNode>>& addrTranslationTable,
+      std::vector<std::unordered_map<GNode, GNode>>& sTranslationTable,
+      std::vector<std::unordered_map<GNode, GNode>>& rTranslationTable,
       galois::LargeArray<uint64_t>& out_degrees,
       galois::LargeArray<bool>& coverage_vector,
       MPICore& net);
@@ -210,14 +208,15 @@ class DistributedGraph
 
   bool isCoverageComplete(std::vector<GNode>& frontier);
 
-  GNode getLocalNode(GNode& gid);
-  GNode getGlobalNode(GNode& lid);
-  uint64_t getOutDegree(GNode& lid);
+  GNode getLocalNode(const GNode& gid);
+  GNode getGlobalNode(const GNode& lid);
+  uint64_t getOutDegree(const GNode& lid);
 
   uint64_t getMirrorPartition(const GNode& gid);
   uint64_t getMasterPartition(const GNode& gid);
 
   void printState();
+  void printGraph();
 
   uint64_t getNumVertices()
   {
@@ -243,8 +242,8 @@ class DistributedGraph
   Graph bgraph;
 
   std::vector<galois::DynamicBitSet>& bitCommVector;
-  std::vector<galois::LargeArray<GNode>>& addrTranslationTable;
-
+  std::vector<std::unordered_map<GNode, GNode>>& sTranslationTable;
+  std::vector<std::unordered_map<GNode, GNode>>& rTranslationTable;
   MPICore& net;
 
   std::unordered_map<GNode, GNode> gid_to_lid;

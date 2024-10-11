@@ -27,8 +27,8 @@ class Worker
   uint32_t getVertexMemoryPartition(const GNode& lid);
 
   std::vector<galois::DynamicBitSet> bitCommVector;
-  std::vector<galois::LargeArray<GNode>> addrTranslationTable;
-
+  std::vector<std::unordered_map<GNode, GNode>> sTranslationTable;
+  std::vector<std::unordered_map<GNode, GNode>> rTranslationTable;
   DistributedGraph* distributed_graph;
   uint64_t num_vertices;
   galois::LargeArray<bool> coverage_vector;

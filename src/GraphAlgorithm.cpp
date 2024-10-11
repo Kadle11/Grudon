@@ -24,7 +24,7 @@ GraphAlgorithm<VertexProperty>::GraphAlgorithm(
     propertyBuffers.resize(num_memory);
     for (int i = 0; i < num_memory; i++)
     {
-      propertyBuffers[i].allocateLocal(worker->addrTranslationTable[i].size());
+      propertyBuffers[i].allocateLocal(worker->sTranslationTable[i].size());
     }
   }
   else if (node_type == MEMORY_NODE)
@@ -33,7 +33,7 @@ GraphAlgorithm<VertexProperty>::GraphAlgorithm(
     propertyBuffers.resize(num_compute);
     for (int i = 0; i < num_compute; i++)
     {
-      propertyBuffers[i].allocateLocal(worker->addrTranslationTable[i].size());
+      propertyBuffers[i].allocateLocal(worker->sTranslationTable[i].size());
     }
   }
 
@@ -66,6 +66,7 @@ void GraphAlgorithm<VertexProperty>::run()
   while (worker_completion_count != num_compute && iteration < MAX_ITERATIONS)
   {
     worker_completion_count = 0;
+    completion = 0;
 
     // Send the Frontier to all Traversers
     if (node_type == COMPUTE_NODE)
@@ -73,25 +74,34 @@ void GraphAlgorithm<VertexProperty>::run()
       std::sort(frontier.begin(), frontier.end());
       for (GNode &lid : frontier)
       {
-        uint32_t worker_id = worker->getVertexMemoryPartition(lid);
-        worker->bitCommVector[worker_id].set(lid);
+        GNode gid = worker->distributed_graph->getGlobalNode(lid);
+        uint32_t worker_id = worker->getVertexMemoryPartition(gid);
+        worker->bitCommVector[worker_id].set(worker->sTranslationTable[worker_id][lid]);
         propertyBuffers[worker_id][idxTracker[worker_id]] = vertex_properties[lid];
         idxTracker[worker_id]++;
 
         spdlog::debug(
-            "[Proc {}] Sending Vertex/Property: {}/{} to Memory Node: {}",
+            "[Proc {}/{}] Sending GVertex/Trans/Property: {}/{}/{} to Memory Node: {}",
             worker->node_id,
-            lid,
+            iteration,
+            gid,
+            worker->sTranslationTable[worker_id][lid],
             vertex_properties[lid],
             worker_id);
       }
 
       for (int i = 0; i < num_memory; i++)
       {
-        net.send(
-            i + num_memory, 0, worker->bitCommVector[i].bitvec.data(), worker->bitCommVector[i].size_bytes(), MPI_UINT64_T);
+        spdlog::debug(
+            "[Proc {}] Sending BitCommVector {} to Memory Node: {}",
+            worker->node_id,
+            fmt_array(worker->bitCommVector[i].bitvec),
+            i);
 
-        net.send(i + num_memory, 0, propertyBuffers[i].data(), idxTracker[i], MPI_VERTEX_PROPERTY_T);
+        net.send(
+            i + num_compute, 0, worker->bitCommVector[i].bitvec.data(), worker->bitCommVector[i].size_bytes(), MPI_UINT64_T);
+
+        net.send(i + num_compute, 0, propertyBuffers[i].data(), idxTracker[i], MPI_VERTEX_PROPERTY_T);
         worker->bitCommVector[i].reset();
       }
 
@@ -109,21 +119,29 @@ void GraphAlgorithm<VertexProperty>::run()
             worker->bitCommVector[i].size_bytes(),
             MPI_UINT64_T,
             MPI_STATUS_IGNORE);
-
         net.recv(i, 0, propertyBuffers[i].data(), propertyBuffers[i].size(), MPI_VERTEX_PROPERTY_T, MPI_STATUS_IGNORE);
 
         size_t bitCommVectorSize = worker->bitCommVector[i].size();
+
+        spdlog::debug(
+            "[Proc {}] Received BitCommVector {} from Compute Node: {}",
+            worker->node_id,
+            fmt_array(worker->bitCommVector[i].bitvec),
+            i);
 
         for (size_t j = 0; j < bitCommVectorSize; j++)
         {
           if (worker->bitCommVector[i].test(j))
           {
             spdlog::debug(
-                "[Proc {}] Updating Vertex/Property: {}/{}",
+                "[Proc {}/{}] Updating GVertex/Trans/Property: {}/{}/{}",
                 worker->node_id,
-                worker->addrTranslationTable[i][j],
+                iteration,
+                worker->distributed_graph->getGlobalNode(worker->rTranslationTable[i][j]),
+                j,
                 propertyBuffers[i][idxTracker[i]]);
-            GNode lid = worker->addrTranslationTable[i][j];
+
+            GNode lid = worker->rTranslationTable[i][j];
             vertex_properties.set(lid, propertyBuffers[i][idxTracker[i]]);
             idxTracker[i]++;
           }
@@ -135,7 +153,7 @@ void GraphAlgorithm<VertexProperty>::run()
       idxTracker.assign(num_compute, 0);
     }
 
-    // TODO: Clear the BitCommVector, UpdatedVertices and IdxTracker
+    spdlog::debug("[Proc {}] Barrier 1: {}", worker->node_id, iteration);
     net.barrier();
 
     if (node_type == MEMORY_NODE)
@@ -143,16 +161,20 @@ void GraphAlgorithm<VertexProperty>::run()
       worker->traverse(*this);
 
       const std::set<GNode> &updated_vertices = vertex_updates.getUpdatedVertices();
+      spdlog::debug("[Proc {}] Updated Vertices: {}", this->worker->node_id, fmt_array(updated_vertices));
+
       for (const GNode &lid : updated_vertices)
       {
-        uint32_t worker_id = worker->getVertexComputePartition(lid);
-        worker->bitCommVector[worker_id].set(lid);
+        GNode gid = worker->distributed_graph->getGlobalNode(lid);
+        uint32_t worker_id = worker->getVertexComputePartition(gid);
+        worker->bitCommVector[worker_id].set(worker->sTranslationTable[worker_id][lid]);
         propertyBuffers[worker_id][idxTracker[worker_id]] = vertex_updates[lid];
 
         spdlog::debug(
-            "[Proc {}] Sending Vertex/Update: {}/{} to Compute Node: {}",
+            "[Proc {}/{}] Sending GVertex/Update: {}/{} to Compute Node: {}",
             worker->node_id,
-            lid,
+            iteration,
+            gid,
             propertyBuffers[worker_id][idxTracker[worker_id]],
             worker_id);
 
@@ -170,7 +192,7 @@ void GraphAlgorithm<VertexProperty>::run()
       for (int i = 0; i < num_memory; i++)
       {
         net.recv(
-            i + num_memory,
+            i + num_compute,
             0,
             worker->bitCommVector[i].bitvec.data(),
             worker->bitCommVector[i].size_bytes(),
@@ -178,7 +200,7 @@ void GraphAlgorithm<VertexProperty>::run()
             MPI_STATUS_IGNORE);
 
         net.recv(
-            i + num_memory,
+            i + num_compute,
             0,
             propertyBuffers[i].data(),
             propertyBuffers[i].size(),
@@ -191,13 +213,15 @@ void GraphAlgorithm<VertexProperty>::run()
           if (worker->bitCommVector[i].test(j))
           {
             spdlog::debug(
-                "[Proc {}] Aggregating Vertex/CurrProp/Update: {}/{}/{}",
+                "[Proc {}/{}] Aggregating GVertex/CurrProp/Update: {}/{}/{} from {}",
                 worker->node_id,
-                worker->addrTranslationTable[i][j],
-                vertex_updates[worker->addrTranslationTable[i][j]],
-                propertyBuffers[i][idxTracker[i]]);
+                iteration,
+                worker->distributed_graph->getGlobalNode(worker->rTranslationTable[i][j]),
+                vertex_updates[worker->rTranslationTable[i][j]],
+                propertyBuffers[i][idxTracker[i]],
+                i);
 
-            GNode lid = worker->addrTranslationTable[i][j];
+            GNode lid = worker->rTranslationTable[i][j];
             worker->aggregate(*this, lid, propertyBuffers[i][idxTracker[i]]);
             idxTracker[i]++;
           }
@@ -206,6 +230,7 @@ void GraphAlgorithm<VertexProperty>::run()
     }
 
     // TODO: Clear the BitCommVector, UpdatedVertices and IdxTracker
+    spdlog::debug("[Proc {}] Barrier 2: {}", worker->node_id, iteration);
     net.barrier();
 
     if (node_type == COMPUTE_NODE)
@@ -216,17 +241,17 @@ void GraphAlgorithm<VertexProperty>::run()
         completion = 1;
       }
 
-      for (uint32_t i = 0; i < num_compute; i++)
+      for (uint32_t i = 0; i < num_memory; i++)
       {
         worker->bitCommVector[i].reset();
       }
 
       idxTracker.assign(num_memory, 0);
-      vertex_updates.clear_uv();
+      vertex_updates.clear_uv(); // Clear the Updated Vertices ONLY
     }
     else if (node_type == MEMORY_NODE)
     {
-      for (uint32_t i = 0; i < num_memory; i++)
+      for (uint32_t i = 0; i < num_compute; i++)
       {
         worker->bitCommVector[i].reset();
       }
