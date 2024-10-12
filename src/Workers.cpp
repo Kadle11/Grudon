@@ -105,7 +105,7 @@ TraverseWorker<T>::TraverseWorker(
 template<typename T>
 void TraverseWorker<T>::traverse(GraphAlgorithm<T>& algorithm)
 {
-  algorithm.gen_updates();
+    algorithm.gen_updates();
 }
 
 template<typename T>

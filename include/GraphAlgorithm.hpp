@@ -5,7 +5,7 @@
 #include "Graph.hpp"
 #include "Workers.hpp"
 
-#define MAX_ITERATIONS 100
+#define MAX_ITERATIONS 1000
 
 template<typename VertexProperty>
 class Worker;

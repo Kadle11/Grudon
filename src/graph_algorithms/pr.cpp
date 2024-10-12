@@ -17,6 +17,7 @@ PageRank<VertexProperty>::PageRank(
 template<typename VertexProperty>
 void PageRank<VertexProperty>::init()
 {
+  // TODO: Try the std::distance() - 1 for socLJ 120 Iterations --> 150 Iterations
   // Initialize the Vertex Properties
   if (this->node_type == COMPUTE_NODE)
   {
