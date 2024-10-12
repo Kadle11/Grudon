@@ -1,0 +1,9 @@
+[submodule "extern/Galois"]
+	path = extern/Galois
+	url = git@github.com:Kadle11/Galois.git
+[submodule "extern/cxxopts"]
+	path = extern/cxxopts
+	url = https://github.com/jarro2783/cxxopts.git
+[submodule "extern/spdlog"]
+	path = extern/spdlog
+	url = https://github.com/gabime/spdlog.git

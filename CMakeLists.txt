@@ -5,15 +5,15 @@ cmake_minimum_required(VERSION 3.15)
 #
 
 project(
-  "Project"
+  Groudon
   VERSION 0.1.0
   LANGUAGES CXX
 )
 
+
 #
 # Set project options
 #
-
 include(cmake/StandardSettings.cmake)
 include(cmake/StaticAnalyzers.cmake)
 include(cmake/Utils.cmake)
@@ -26,6 +26,7 @@ if (UNIX)
     add_compile_options("$<$<CONFIG:DEBUG>:-D_DEBUG>")    #this will allow to use same _DEBUG macro available in both Linux as well as Windows - MSCV environment. Easy to put Debug specific code.
 endif (UNIX)
 
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/modules")
 
 #
 # Setup alternative names
@@ -156,24 +157,27 @@ include(cmake/Doxygen.cmake)
 # Model project dependencies
 #
 
-# Identify and link with the specific "packages" the project uses
-#find_package(package_name package_version REQUIRED package_type [other_options])
-#target_link_libraries(
-#  ${PROJECT_NAME}
-#  PUBLIC
-#    dependency1 ...
-#  PRIVATE
-#    dependency2 ...
-#    ${PROJECT_NAME}_PROJECT_OPTIONS
-#    ${PROJECT_NAME}_PROJECT_WARNINGS
-#)
-#if(${PROJECT_NAME}_BUILD_EXECUTABLE AND ${PROJECT_NAME}_ENABLE_UNIT_TESTING)
-#  target_link_libraries(
-#    ${PROJECT_NAME}_LIB
-#    PUBLIC
-#      dependency1 ...
-#  )
-#endif()
+
+# Remove Warnings for Executable
+target_compile_options(${PROJECT_NAME} PRIVATE -w)
+
+# Add CXXOpts
+target_include_directories(${PROJECT_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/extern/cxxopts/include)
+
+# Add SpdLog
+target_include_directories(${PROJECT_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/extern/spdlog/include)
+
+# Add LibNuma
+find_library(NUMA_LIBRARY numa)
+find_path(NUMA_INCLUDE_DIR numa.h)
+target_include_directories(${PROJECT_NAME} PRIVATE ${NUMA_INCLUDE_DIR})
+target_link_libraries(${PROJECT_NAME} PRIVATE ${NUMA_LIBRARY})
+
+
+# Add Galois
+add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/extern/Galois EXCLUDE_FROM_ALL)
+target_include_directories(${PROJECT_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/extern/Galois/include)
+target_link_libraries(${PROJECT_NAME} PRIVATE Galois::shmem)
 
 # For Windows, it is necessary to link with the MultiThreaded library.
 # Depending on how the rest of the project's dependencies are linked, it might be necessary

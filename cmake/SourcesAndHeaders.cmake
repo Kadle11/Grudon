@@ -1,5 +1,8 @@
 set(sources
-    src/tmp.cpp
+		src/DistributedGraph.cpp
+		src/Workers.cpp
+		src/GraphAlgorithm.cpp
+		src/graph_algorithms/pr.cpp
 )
 
 set(exe_sources
@@ -8,9 +11,12 @@ set(exe_sources
 )
 
 set(headers
-    include/project/tmp.hpp
-)
-
-set(test_sources
-  src/tmp_test.cpp
-)
+	include/partitioning_engine/Partitioner.hpp
+    include/DistributedGraph.hpp
+	include/Graph.hpp
+	include/MPI.hpp
+	include/Logger.hpp
+	include/Workers.hpp
+	include/GraphAlgorithm.hpp
+	include/graph_algorithms/pr.hpp
+)	
