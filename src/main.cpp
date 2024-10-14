@@ -126,7 +126,7 @@ int main(int argc, char **argv)
 
   pr->init();
   pr->run();
-  pr->printState();
+  // pr->printState();
 
   delete pr;
 

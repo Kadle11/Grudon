@@ -4,6 +4,8 @@
 
 #include "Logger.hpp"
 #include "MPI.hpp"
+#include "offload_engine/INCEngine.hpp"
+#include "offload_engine/NDPEngine.hpp"
 
 template<typename VertexProperty>
 GraphAlgorithm<VertexProperty>::GraphAlgorithm(
@@ -63,12 +65,32 @@ void GraphAlgorithm<VertexProperty>::run()
   }
 
   uint32_t completion = 0;
+  OFFLOAD_DECISION memory_offload = NDP_OFFLOAD;
+  OFFLOAD_DECISION switch_offload = NO_OFFLOAD;
   uint32_t iteration = 0;
+  size_t ndp_offload_threshold = worker->total_vertices / 20;
+  uint64_t inc_offload_threshold = std::accumulate(worker->out_degrees.begin(), worker->out_degrees.end(), 0) / 20;
 
   while (worker_completion_count != num_compute && iteration < MAX_ITERATIONS)
   {
+    memory_offload = NDP_OFFLOAD;
+    switch_offload = NO_OFFLOAD;
+    ndp_decision = NDP_OFFLOAD;
+    inc_decision = NO_OFFLOAD;
+
     worker_completion_count = 0;
     completion = 0;
+
+    if (node_type == COMPUTE_NODE)
+    {
+      memory_offload =
+          NDPEngine(frontier, worker->coverage_vector, ndp_offload_threshold, *worker->distributed_graph, num_compute);
+
+      switch_offload = INCEngine(frontier, worker->out_degrees, *worker->distributed_graph, inc_offload_threshold);
+    }
+
+    net.allReduce(&memory_offload, &ndp_decision, 1, MPI_UINT32_T, MPI_MIN);
+    net.allReduce(&switch_offload, &inc_decision, 1, MPI_UINT32_T, MPI_MIN);
 
     // Send the Frontier to all Traversers
     if (node_type == COMPUTE_NODE)
@@ -159,7 +181,7 @@ void GraphAlgorithm<VertexProperty>::run()
 
     if (node_type == MEMORY_NODE)
     {
-      if (false)
+      if (ndp_decision == NDP_OFFLOAD)
       {
         worker->traverse(*this);
 
@@ -190,7 +212,7 @@ void GraphAlgorithm<VertexProperty>::run()
           net.send(i, 0, propertyBuffers[i].data(), idxTracker[i], MPI_VERTEX_PROPERTY_T);
         }
       }
-      else
+      else if (ndp_decision == NO_OFFLOAD)
       {
         galois::ThreadSafeOrderedSet<GNode> &updated_vertices = vertex_properties.getUpdatedVertices();
 
@@ -240,11 +262,13 @@ void GraphAlgorithm<VertexProperty>::run()
     }
     else if (node_type == COMPUTE_NODE)
     {
-      if (false)
+      if (ndp_decision == NDP_OFFLOAD)
       {
+        uint64_t bytes_recv = 0;
+
         for (int i = 0; i < num_memory; i++)
         {
-          net.recv(
+          bytes_recv = net.recv(
               i + num_compute,
               0,
               worker->bitCommVector[i].bitvec.data(),
@@ -252,7 +276,7 @@ void GraphAlgorithm<VertexProperty>::run()
               MPI_UINT64_T,
               MPI_STATUS_IGNORE);
 
-          net.recv(
+          bytes_recv += net.recv(
               i + num_compute,
               0,
               propertyBuffers[i].data(),
@@ -261,27 +285,65 @@ void GraphAlgorithm<VertexProperty>::run()
               MPI_STATUS_IGNORE);
 
           size_t bitCommVectorSize = worker->bitCommVector[i].size();
-          for (size_t j = 0; j < bitCommVectorSize; j++)
-          {
-            if (worker->bitCommVector[i].test(j))
-            {
-              spdlog::debug(
-                  "[Proc {}/{}] Aggregating GVertex/CurrProp/Update: {}/{}/{} from {}",
-                  worker->node_id,
-                  iteration,
-                  worker->distributed_graph->getGlobalNode(worker->rTranslationTable[i][j]),
-                  vertex_updates[worker->rTranslationTable[i][j]],
-                  propertyBuffers[i][idxTracker[i]],
-                  i);
 
-              GNode lid = worker->rTranslationTable[i][j];
-              worker->aggregate(*this, lid, propertyBuffers[i][idxTracker[i]]);
-              idxTracker[i]++;
+          if (switch_offload == INC_OFFLOAD)
+          {
+            net.decrementBytesMoved(bytes_recv);
+            bytes_recv = 0;
+
+            galois::DynamicBitSet aggregate_bitset;
+            aggregate_bitset.resize(worker->num_vertices);
+
+            for (size_t j = 0; j < bitCommVectorSize; j++)
+            {
+              if (worker->bitCommVector[i].test(j))
+              {
+                spdlog::debug(
+                    "[Proc {}/{}] Aggregating GVertex/CurrProp/Update: {}/{}/{} from {}",
+                    worker->node_id,
+                    iteration,
+                    worker->distributed_graph->getGlobalNode(worker->rTranslationTable[i][j]),
+                    vertex_updates[worker->rTranslationTable[i][j]],
+                    propertyBuffers[i][idxTracker[i]],
+                    i);
+
+                GNode lid = worker->rTranslationTable[i][j];
+                worker->aggregate(*this, lid, propertyBuffers[i][idxTracker[i]]);
+                aggregate_bitset.set(lid);
+                idxTracker[i]++;
+              }
+            }
+
+            bytes_recv =
+                aggregate_bitset.size_bytes() * sizeof(uint64_t) + aggregate_bitset.count() * sizeof(VertexProperty);
+            net.incrementBytesMoved(bytes_recv);
+            aggregate_bitset.reset();
+            bytes_recv = 0;
+          }
+          else
+          {
+            for (size_t j = 0; j < bitCommVectorSize; j++)
+            {
+              if (worker->bitCommVector[i].test(j))
+              {
+                spdlog::debug(
+                    "[Proc {}/{}] Aggregating GVertex/CurrProp/Update: {}/{}/{} from {}",
+                    worker->node_id,
+                    iteration,
+                    worker->distributed_graph->getGlobalNode(worker->rTranslationTable[i][j]),
+                    vertex_updates[worker->rTranslationTable[i][j]],
+                    propertyBuffers[i][idxTracker[i]],
+                    i);
+
+                GNode lid = worker->rTranslationTable[i][j];
+                worker->aggregate(*this, lid, propertyBuffers[i][idxTracker[i]]);
+                idxTracker[i]++;
+              }
             }
           }
         }
       }
-      else
+      else if (ndp_decision == NO_OFFLOAD)
       {
         // Recive the Edges for the frontier from the Memory Nodes
         uint64_t max_out_degree = 0;
@@ -325,6 +387,7 @@ void GraphAlgorithm<VertexProperty>::run()
                     l_dst,
                     worker_id);
 
+                // TODO: Need to Abstract this to the Graph Algorithm
                 vertex_updates.addUpdate(l_dst, vertex_properties[src]);
               },
               galois::loopname("Generate Updates"),
@@ -336,7 +399,6 @@ void GraphAlgorithm<VertexProperty>::run()
       }
     }
 
-    // TODO: Clear the BitCommVector, UpdatedVertices and IdxTracker
     spdlog::debug("[Proc {}] Barrier 2: {}", worker->node_id, iteration);
     net.barrier();
 

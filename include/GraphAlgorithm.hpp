@@ -36,7 +36,7 @@ class GraphAlgorithm
   virtual void apply_updates() = 0;
   virtual void gen_updates() = 0;
   virtual void update_frontier() = 0;
-  virtual void aggregate(GNode &lid, const VertexProperty& buffer_val) = 0;
+  virtual void aggregate(GNode& lid, const VertexProperty& buffer_val) = 0;
   virtual bool termination_check() = 0;
   virtual void printState() = 0;
 
@@ -47,7 +47,7 @@ class GraphAlgorithm
   std::vector<GNode> frontier;
   PropertyList<VertexProperty> vertex_properties;
   PropertyList<VertexProperty> vertex_updates;
-  Worker<VertexProperty> *worker;
+  Worker<VertexProperty>* worker;
 
   NODE_TYPE node_type;
   MPI_Datatype MPI_VERTEX_PROPERTY_T;
@@ -57,6 +57,9 @@ class GraphAlgorithm
   uint32_t num_workers;
   uint32_t num_compute;
   uint32_t num_memory;
+
+  OFFLOAD_DECISION ndp_decision;
+  OFFLOAD_DECISION inc_decision;
 
   std::vector<galois::LargeArray<VertexProperty>> propertyBuffers;
   galois::DynamicBitSet updatedVertices;
@@ -68,7 +71,6 @@ class GraphAlgorithm
   friend class AggregateWorker<VertexProperty>;
   friend class Worker<VertexProperty>;
 };
-
 
 // Explicit Instantiation
 template class GraphAlgorithm<float>;

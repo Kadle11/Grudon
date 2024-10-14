@@ -20,6 +20,7 @@ class MPICore
 
     MPI_Comm_size(MPI_COMM_WORLD, &num_procs);
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    bytes_moved = 0;
   }
 
   ~MPICore()
@@ -39,12 +40,18 @@ class MPICore
 
   int send(int dest, int tag, void* buf, int count, MPI_Datatype datatype)
   {
+    MPI_Type_size(datatype, &stype_size);
+    bytes_moved += count * stype_size;
     return MPI_Send(buf, count, datatype, dest, tag, MPI_COMM_WORLD);
   }
 
-  int recv(int source, int tag, void* buf, int count, MPI_Datatype datatype, MPI_Status* status)
+  uint64_t recv(int source, int tag, void* buf, int count, MPI_Datatype datatype, MPI_Status* status)
   {
-    return MPI_Recv(buf, count, datatype, source, tag, MPI_COMM_WORLD, status);
+    MPI_Recv(buf, count, datatype, source, tag, MPI_COMM_WORLD, &local_status);
+    MPI_Get_count(&local_status, datatype, &local_count);
+    MPI_Type_size(datatype, &rtype_size);
+    bytes_moved += local_count * rtype_size;
+    return local_count * rtype_size;
   }
 
   void barrier()
@@ -74,9 +81,29 @@ class MPICore
     MPI_Allreduce(sendbuf, recvbuf, count, datatype, op, MPI_COMM_WORLD);
   }
 
+  uint64_t getBytesMoved()
+  {
+    return bytes_moved;
+  }
+
+  void decrementBytesMoved(const uint64_t& bytes)
+  {
+    bytes_moved -= bytes;
+  }
+
+  void incrementBytesMoved(const uint64_t& bytes)
+  {
+    bytes_moved += bytes;
+  }
+
  private:
   int rank;
   int num_procs;
+  uint64_t bytes_moved;
+  int local_count;
+  int stype_size;
+  int rtype_size;
+  MPI_Status local_status;
 };
 
 template<typename T>
@@ -185,4 +212,4 @@ template<typename T>
   return mpi_type;
 }
 
-#endif // MPICORE_HPP
+#endif  // MPICORE_HPP

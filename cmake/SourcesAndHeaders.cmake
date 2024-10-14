@@ -12,6 +12,8 @@ set(exe_sources
 
 set(headers
 	include/partitioning_engine/Partitioner.hpp
+	include/offload_engine/NDPEngine.hpp
+	include/offload_engine/INCEngine.hpp
     include/DistributedGraph.hpp
 	include/Graph.hpp
 	include/MPI.hpp
