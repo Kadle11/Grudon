@@ -703,6 +703,11 @@ DistributedGraph::DistributedGraph(
   net.barrier();
 
   // FIXME: Clear all Memory Allocations
+
+  if (node_id == 0)
+  {
+    bgraph.deallocate();
+  }
 }
 
 bool DistributedGraph::isCoverageComplete(std::vector<GNode>& frontier)
@@ -807,7 +812,12 @@ void DistributedGraph::printState()
     {
       for (auto& translationElem : sTranslationTable[i])
       {
-        spdlog::info("[Proc {}] Memory Node {}: GNode {} -> Set Bit {}", node_id, i, lid_to_gid[translationElem.first], translationElem.second);
+        spdlog::info(
+            "[Proc {}] Memory Node {}: GNode {} -> Set Bit {}",
+            node_id,
+            i,
+            lid_to_gid[translationElem.first],
+            translationElem.second);
       }
     }
 
@@ -815,7 +825,12 @@ void DistributedGraph::printState()
     {
       for (auto& translationElem : rTranslationTable[i])
       {
-        spdlog::info("[Proc {}] Memory Node {}: Test Bit {} -> GNode {}", node_id, i, translationElem.first, lid_to_gid[translationElem.second]);
+        spdlog::info(
+            "[Proc {}] Memory Node {}: Test Bit {} -> GNode {}",
+            node_id,
+            i,
+            translationElem.first,
+            lid_to_gid[translationElem.second]);
       }
     }
   }
@@ -825,7 +840,12 @@ void DistributedGraph::printState()
     {
       for (auto& translationElem : sTranslationTable[i])
       {
-        spdlog::info("[Proc {}] Compute Node {}: GNode {} -> Set Bit {}", node_id, i, lid_to_gid[translationElem.first], translationElem.second);
+        spdlog::info(
+            "[Proc {}] Compute Node {}: GNode {} -> Set Bit {}",
+            node_id,
+            i,
+            lid_to_gid[translationElem.first],
+            translationElem.second);
       }
     }
 
@@ -833,7 +853,12 @@ void DistributedGraph::printState()
     {
       for (auto& translationElem : rTranslationTable[i])
       {
-        spdlog::info("[Proc {}] Compute Node {}: Test Bit {} -> GNode {}", node_id, i, translationElem.first, lid_to_gid[translationElem.second]);
+        spdlog::info(
+            "[Proc {}] Compute Node {}: Test Bit {} -> GNode {}",
+            node_id,
+            i,
+            translationElem.first,
+            lid_to_gid[translationElem.second]);
       }
     }
   }

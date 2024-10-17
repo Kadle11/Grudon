@@ -65,7 +65,7 @@ void GraphAlgorithm<VertexProperty>::run()
   }
 
   uint32_t completion = 0;
-  OFFLOAD_DECISION memory_offload = NDP_OFFLOAD;
+  OFFLOAD_DECISION memory_offload = NO_OFFLOAD;
   OFFLOAD_DECISION switch_offload = NO_OFFLOAD;
   uint32_t iteration = 0;
   size_t ndp_offload_threshold = worker->total_vertices / 20;
@@ -73,9 +73,9 @@ void GraphAlgorithm<VertexProperty>::run()
 
   while (worker_completion_count != num_compute && iteration < MAX_ITERATIONS)
   {
-    memory_offload = NDP_OFFLOAD;
+    memory_offload = NO_OFFLOAD;
     switch_offload = NO_OFFLOAD;
-    ndp_decision = NDP_OFFLOAD;
+    ndp_decision = NO_OFFLOAD;
     inc_decision = NO_OFFLOAD;
 
     worker_completion_count = 0;
@@ -436,7 +436,17 @@ void GraphAlgorithm<VertexProperty>::run()
 
     net.allReduce(&completion, &worker_completion_count, 1, MPI_UINT32_T, MPI_SUM);
 
-    spdlog::info("[Proc {}] Iteration: {}, WCC: {}", worker->node_id, iteration++, worker_completion_count);
+    spdlog::debug("[Proc {}] Iteration: {}, WCC: {}", worker->node_id, iteration++, worker_completion_count);
     net.barrier();
+  }
+
+  uint64_t total_bytes = 0;
+  uint64_t bytes = net.getBytesMoved();
+  net.allReduce(&bytes, &total_bytes, 1, MPI_UINT64_T, MPI_SUM);
+
+  if (worker->node_id == 0)
+  {
+    galois::runtime::reportStat_Single(algorithm_name, "Iterations", iteration);
+    galois::runtime::reportStat_Single(algorithm_name, "TotalBytesMoved", total_bytes);
   }
 }

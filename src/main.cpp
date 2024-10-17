@@ -121,7 +121,7 @@ int main(int argc, char **argv)
 
   // distributed_graph.printState();
 
-  GraphAlgorithm<double> *pr = new PageRank<double>(node_type, "PageRank", graph_path, num_compute, num_memory, node_id,
+  GraphAlgorithm<float> *pr = new PageRank<float>(node_type, "PageRank", graph_path, num_compute, num_memory, node_id,
   net);
 
   pr->init();

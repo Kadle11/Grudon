@@ -19,7 +19,7 @@ OFFLOAD_DECISION NDPEngine(
     return NDP_OFFLOAD;
   }
 
-  if (!std::all_of(coverage_vector.begin(), coverage_vector.end(), [](bool v) { return v; }))
+  if (!std::all_of(frontier.begin(), frontier.end(), [&](GNode v) { return coverage_vector[v]; }))
   {
     return NDP_OFFLOAD;
   }
@@ -44,7 +44,7 @@ OFFLOAD_DECISION NDPEngine(
     return NDP_OFFLOAD;
   }
 
-  spdlog::info("No Offload, Frontier Size: {}", frontier.size());
+  // spdlog::info("No Offload, Frontier Size: {}", frontier.size());
 
   return NO_OFFLOAD;
 }

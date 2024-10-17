@@ -81,7 +81,7 @@ class MPICore
     MPI_Allreduce(sendbuf, recvbuf, count, datatype, op, MPI_COMM_WORLD);
   }
 
-  uint64_t getBytesMoved()
+  uint64_t& getBytesMoved()
   {
     return bytes_moved;
   }
