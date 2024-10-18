@@ -8,7 +8,7 @@
 // TODO: Are Galois Primitives faster than Std Primitives?
 
 OFFLOAD_DECISION NDPEngine(
-    std::vector<GNode>& frontier,
+    galois::ThreadSafeOrderedSet<GNode>& frontier,
     galois::LargeArray<bool>& coverage_vector,
     size_t& offload_threshold,
     DistributedGraph& distributed_graph,
@@ -26,7 +26,7 @@ OFFLOAD_DECISION NDPEngine(
 
   std::vector<uint64_t> mirrorCoverage(num_memory, 0);
 
-  for (GNode& lid : frontier)
+  for (const GNode& lid : frontier)
   {
     GNode gid = distributed_graph.getGlobalNode(lid);
     uint32_t worker_id = distributed_graph.getMirrorPartition(gid);

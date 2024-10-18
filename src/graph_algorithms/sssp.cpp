@@ -1,7 +1,7 @@
-#include "graph_algorithms/pr.hpp"
+#include "graph_algorithms/sssp.hpp"
 
 template<typename VertexProperty>
-PageRank<VertexProperty>::PageRank(
+SSSP<VertexProperty>::SSSP(
     NODE_TYPE node_type,
     std::string algorithm_name,
     std::string graph_path,
@@ -11,78 +11,60 @@ PageRank<VertexProperty>::PageRank(
     MPICore &net)
     : GraphAlgorithm<VertexProperty>(node_type, algorithm_name, graph_path, num_compute, num_memory, node_id, net)
 {
-  this->algorithm_name = "PageRank";
+  this->algorithm_name = "SSSP";
 }
 
 template<typename VertexProperty>
-void PageRank<VertexProperty>::init()
+void SSSP<VertexProperty>::init()
 {
-  // TODO: Try the std::distance() - 1 for socLJ 120 Iterations --> 150 Iterations
+  // TODO: T 
   // Initialize the Vertex Properties
   if (this->node_type == COMPUTE_NODE)
   {
-    this->pr_vals.allocate(this->worker->num_vertices);
-    this->prev_updates.allocate(this->worker->num_vertices);
-
     for (GNode n = 0; n < this->worker->num_vertices; ++n)
     {
-      if (this->worker->out_degrees[n] != 0)
-      {
-        this->vertex_properties[n] = DAMPING_FACTOR * (1.0 - DAMPING_FACTOR) / this->worker->out_degrees[n];
-        this->pr_vals[n] = 1.0 - DAMPING_FACTOR;
-        this->frontier.push_back(n);
-
-        this->vertex_updates[n] = 0.0;
-        this->prev_updates[n] = 0.0;
-      }
+      this->vertex_properties[n] = std::numeric_limits<VertexProperty>::max();
+      this->vertex_updates[n] = std::numeric_limits<VertexProperty>::max();
     }
   }
   else if (this->node_type == MEMORY_NODE)
   {
     for (GNode n = 0; n < this->worker->num_vertices; ++n)
     {
-      this->vertex_properties[n] = 0.0;
-      this->vertex_updates[n] = 0.0;
+      this->vertex_properties[n] = std::numeric_limits<VertexProperty>::max();
+      this->vertex_updates[n] = std::numeric_limits<VertexProperty>::max();
     }
   }
 
-  this->clear_updates = true;
+  // Initialize the Source Node
+  if (this->worker->node_id == 0)
+  {
+    this->vertex_properties[0] = 0;
+    this->vertex_updates[0] = 0;
+    this->frontier.push_back(0);
+  }
 }
 
 template<typename VertexProperty>
-void PageRank<VertexProperty>::apply_updates()
+void SSSP<VertexProperty>::apply_updates()
 {
-  // Print the Vertex Properties
+  // Print the Vertex Properties 
   // for (GNode n = 0; n < this->worker->num_vertices; ++n)
   // {
-  //   spdlog::info("[Proc {}] Vertex {}: {}/{}", this->worker->node_id, n, this->pr_vals[n], this->vertex_updates[n]);
+  //   spdlog::info(
+  //       "[Proc {}] Vertex {}: {}/{}", this->worker->node_id, n, this->vertex_properties[n], this->vertex_updates[n]);
   // }
-
-  galois::do_all(
-      galois::iterate(this->frontier),
-      [&](GNode lid)
-      {
-        if (this->vertex_updates[lid] > TOLERANCE)
-        {
-          this->pr_vals.addUpdate(lid, this->vertex_updates[lid]);
-          this->vertex_properties[lid] = DAMPING_FACTOR * this->vertex_updates[lid] / this->worker->out_degrees[lid];
-          this->vertex_updates[lid] = 0.0;
-          this->prev_updates[lid] = 0.0;
-        }
-      },
-      galois::loopname("Apply Updates"),
-      galois::no_stats(),
-      galois::steal());
 }
 
 template<typename VertexProperty>
-void PageRank<VertexProperty>::gen_updates()
+void SSSP<VertexProperty>::gen_updates()
 {
   galois::ThreadSafeOrderedSet<GNode> &updated_vertices = this->vertex_properties.getUpdatedVertices();
   galois::do_all(
       galois::iterate(updated_vertices.begin(), updated_vertices.end()),
       [&](GNode lid)
       {
+        VertexProperty n_dist = this->vertex_properties[lid] + 1;
         auto ii = this->worker->distributed_graph->lgraph.edge_begin(lid);
         auto ei = this->worker->distributed_graph->lgraph.edge_end(lid);
         for (; ii != ei; ++ii)
@@ -97,7 +79,7 @@ void PageRank<VertexProperty>::gen_updates()
           //     this->vertex_properties[lid],
           //     this->vertex_updates[dst]);
 
-          this->vertex_updates.addUpdate(dst, this->vertex_properties[lid]);
+          this->vertex_updates.minUpdate(dst, n_dist);
         }
       },
       galois::loopname("Generate Updates"),
@@ -106,7 +88,7 @@ void PageRank<VertexProperty>::gen_updates()
 }
 
 template<typename VertexProperty>
-void PageRank<VertexProperty>::update_frontier()
+void SSSP<VertexProperty>::update_frontier()
 {
   galois::substrate::SimpleLock lock;
   galois::ThreadSafeOrderedSet<GNode> &updated_vertices = this->vertex_updates.getUpdatedVertices();
@@ -114,13 +96,11 @@ void PageRank<VertexProperty>::update_frontier()
       galois::iterate(updated_vertices.begin(), updated_vertices.end()),
       [&](GNode lid)
       {
-        if (this->vertex_updates[lid] > TOLERANCE && this->prev_updates[lid] < TOLERANCE)
+        if (this->vertex_properties[lid] > this->vertex_updates[lid])
         {
-          lock.lock();
+          this->vertex_properties[lid] = this->vertex_updates[lid];
           this->frontier.push_back(lid);
-          lock.unlock();
-
-          this->prev_updates[lid] = this->vertex_updates[lid];
+          this->vertex_updates[lid] = std::numeric_limits<VertexProperty>::max();
         }
       },
       galois::loopname("Update Frontier"),
@@ -131,29 +111,29 @@ void PageRank<VertexProperty>::update_frontier()
 }
 
 template<typename VertexProperty>
-void PageRank<VertexProperty>::aggregate(GNode &lid, const VertexProperty &buffer_val)
+void SSSP<VertexProperty>::aggregate(GNode &lid, const VertexProperty &buffer_val)
 {
-  this->vertex_updates.addUpdate(lid, buffer_val);
+  this->vertex_updates.minUpdate(lid, buffer_val);
 }
 
 template<typename VertexProperty>
-bool PageRank<VertexProperty>::termination_check()
+bool SSSP<VertexProperty>::termination_check()
 {
   return this->frontier.empty();
 }
 
 template<typename VertexProperty>
-void PageRank<VertexProperty>::printState()
+void SSSP<VertexProperty>::printState()
 {
   if (this->worker->node_type == COMPUTE_NODE)
   {
     for (GNode n = 0; n < this->worker->num_vertices; ++n)
     {
       spdlog::info(
-          "[Proc {}] Vertex/PR: {}/{}",
+          "[Proc {}] Vertex/Dist: {}/{}",
           this->worker->node_id,
           this->worker->distributed_graph->getGlobalNode(n),
-          this->pr_vals[n]);
+          this->vertex_properties[n]);
     }
   }
 }

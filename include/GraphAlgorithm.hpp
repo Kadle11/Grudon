@@ -5,6 +5,8 @@
 #include "Graph.hpp"
 #include "Workers.hpp"
 
+#include <galois/PriorityQueue.h>
+
 #define MAX_ITERATIONS 1000
 
 template<typename VertexProperty>
@@ -44,7 +46,7 @@ class GraphAlgorithm
 
  protected:
   std::string algorithm_name;
-  std::vector<GNode> frontier;
+  galois::ThreadSafeOrderedSet<GNode> frontier;
   PropertyList<VertexProperty> vertex_properties;
   PropertyList<VertexProperty> vertex_updates;
   Worker<VertexProperty>* worker;
@@ -63,6 +65,7 @@ class GraphAlgorithm
 
   std::vector<galois::LargeArray<VertexProperty>> propertyBuffers;
   galois::DynamicBitSet updatedVertices;
+  bool clear_updates;
 
   // All Workers need access to the Graph Algorithm Interface
 
@@ -76,5 +79,7 @@ class GraphAlgorithm
 template class GraphAlgorithm<float>;
 template class GraphAlgorithm<double>;
 template class GraphAlgorithm<uint64_t>;
+// template class GraphAlgorithm<uint32_t>;
+
 
 #endif  // ALGORITHM_HPP

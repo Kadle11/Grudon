@@ -66,18 +66,22 @@ struct PropertyList
 
   void minUpdate(const GNode& n, const T& val)
   {
-    updated_vertices.insert(n);
-
     std::unique_lock<std::shared_mutex> lock(locks[n]);
-    data[n].v = std::min(data[n].v, val);
+    if (val < data[n].v)
+    {
+      data[n].v = val;
+      updated_vertices.insert(n);
+    }
   }
 
   void maxUpdate(const GNode& n, const T& val)
   {
-    updated_vertices.insert(n);
-
     std::unique_lock<std::shared_mutex> lock(locks[n]);
-    data[n].v = std::max(data[n].v, val);
+    if (val > data[n].v)
+    {
+      data[n].v = val;
+      updated_vertices.insert(n);
+    }
   }
 
   void addUpdate(const GNode& n, const T& val)

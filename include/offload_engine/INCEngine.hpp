@@ -8,7 +8,7 @@
 // TODO: Are Galois Primitives faster than Std Primitives?
 
 OFFLOAD_DECISION INCEngine(
-    std::vector<GNode>& frontier,
+    galois::ThreadSafeOrderedSet<GNode>& frontier,
     galois::LargeArray<uint64_t>& out_degrees,
     DistributedGraph& distributed_graph,
     uint64_t& offload_threshold
@@ -16,14 +16,14 @@ OFFLOAD_DECISION INCEngine(
 {
 
   size_t offload_factor = frontier.size();
-  for (GNode& lid : frontier)
+  for (const GNode& lid : frontier)
   {
     offload_factor += out_degrees[distributed_graph.getGlobalNode(lid)];
   }
 
   if (offload_factor > offload_threshold)
   {
-    return INC_OFFLOAD;
+    return NO_OFFLOAD;
   }
 
   return NO_OFFLOAD;

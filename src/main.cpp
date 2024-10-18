@@ -10,6 +10,8 @@
 #include "MPI.hpp"
 #include "Workers.hpp"
 #include "graph_algorithms/pr.hpp"
+#include "graph_algorithms/sssp.hpp"
+#include "graph_algorithms/cc.hpp"
 
 int main(int argc, char **argv)
 {
@@ -121,14 +123,14 @@ int main(int argc, char **argv)
 
   // distributed_graph.printState();
 
-  GraphAlgorithm<float> *pr = new PageRank<float>(node_type, "PageRank", graph_path, num_compute, num_memory, node_id,
+  GraphAlgorithm<uint64_t> *graph_algorithm = new SSSP<uint64_t>(node_type, "PageRank", graph_path, num_compute, num_memory, node_id,
   net);
 
-  pr->init();
-  pr->run();
-  // pr->printState();
+  graph_algorithm->init();
+  graph_algorithm->run();
+  graph_algorithm->printState();
 
-  delete pr;
+  delete graph_algorithm;
 
   return 0;
 }

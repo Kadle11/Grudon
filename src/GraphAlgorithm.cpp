@@ -41,10 +41,12 @@ GraphAlgorithm<VertexProperty>::GraphAlgorithm(
     }
   }
 
+  clear_updates = false;
+
   worker_completion_count = 0;
   num_workers = num_compute + num_memory;
 
-  frontier.reserve(worker->num_vertices);
+  frontier = galois::ThreadSafeOrderedSet<GNode>();
   vertex_properties.allocate(worker->num_vertices);
   vertex_updates.allocate(worker->num_vertices);
   MPI_VERTEX_PROPERTY_T = mpi_get_type<VertexProperty>();
@@ -95,8 +97,7 @@ void GraphAlgorithm<VertexProperty>::run()
     // Send the Frontier to all Traversers
     if (node_type == COMPUTE_NODE)
     {
-      std::sort(frontier.begin(), frontier.end());
-      for (GNode &lid : frontier)
+      for (const GNode &lid : frontier)
       {
         GNode gid = worker->distributed_graph->getGlobalNode(lid);
         uint32_t worker_id = worker->getVertexMemoryPartition(gid);
@@ -347,7 +348,7 @@ void GraphAlgorithm<VertexProperty>::run()
       {
         // Recive the Edges for the frontier from the Memory Nodes
         uint64_t max_out_degree = 0;
-        for (GNode &lid : frontier)
+        for (const GNode &lid : frontier)
         {
           max_out_degree = std::max(max_out_degree, worker->out_degrees[lid]);
         }
@@ -355,7 +356,7 @@ void GraphAlgorithm<VertexProperty>::run()
         std::vector<GNode> ebuffer;
         ebuffer.resize(max_out_degree + 1, 0);
 
-        for (GNode &lid : frontier)
+        for (const GNode &lid : frontier)
         {
           GNode gid = worker->distributed_graph->getGlobalNode(lid);
           uint32_t worker_id = worker->getVertexMemoryPartition(gid);
@@ -389,6 +390,7 @@ void GraphAlgorithm<VertexProperty>::run()
 
                 // TODO: Need to Abstract this to the Graph Algorithm
                 vertex_updates.addUpdate(l_dst, vertex_properties[src]);
+                // vertex_updates.minUpdate(l_dst, vertex_properties[src]);
               },
               galois::loopname("Generate Updates"),
               galois::no_stats(),
@@ -429,14 +431,22 @@ void GraphAlgorithm<VertexProperty>::run()
       }
 
       idxTracker.assign(num_compute, 0);
-      vertex_updates.clear();
+
+      if (clear_updates)
+      {
+        vertex_updates.clear();
+      }
+      else
+      {
+        vertex_updates.clear_uv();
+      }
     }
 
     vertex_properties.clear_uv();
 
     net.allReduce(&completion, &worker_completion_count, 1, MPI_UINT32_T, MPI_SUM);
 
-    spdlog::debug("[Proc {}] Iteration: {}, WCC: {}", worker->node_id, iteration++, worker_completion_count);
+    spdlog::info("[Proc {}] Iteration: {}, WCC: {}", worker->node_id, iteration++, worker_completion_count);
     net.barrier();
   }
 

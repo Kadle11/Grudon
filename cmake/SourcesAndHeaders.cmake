@@ -3,6 +3,9 @@ set(sources
 		src/Workers.cpp
 		src/GraphAlgorithm.cpp
 		src/graph_algorithms/pr.cpp
+		src/graph_algorithms/sssp.cpp
+		src/graph_algorithms/cc.cpp
+
 )
 
 set(exe_sources
@@ -21,4 +24,6 @@ set(headers
 	include/Workers.hpp
 	include/GraphAlgorithm.hpp
 	include/graph_algorithms/pr.hpp
+	include/graph_algorithms/sssp.hpp
+	include/graph_algorithms/cc.hpp
 )	
