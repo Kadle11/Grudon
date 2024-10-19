@@ -29,6 +29,6 @@ class SSSP : public GraphAlgorithm<VertexProperty>
 
 // Explicit Instantiation
 template class SSSP<uint64_t>;
-// template class SSSP<uint32_t>;
+template class SSSP<uint32_t>;
 
-#endif  // SSSP_HPP
+#endif  // SSSP_HPP - 737266696

@@ -115,17 +115,21 @@ class AggregateWorker : public Worker<T>
 template class Worker<float>;
 template class Worker<double>;
 template class Worker<uint64_t>;
+template class Worker<uint32_t>;
 
 template class UpdateWorker<float>;
 template class UpdateWorker<double>;
 template class UpdateWorker<uint64_t>;
+template class UpdateWorker<uint32_t>; 
 
 template class TraverseWorker<float>;
 template class TraverseWorker<double>;
 template class TraverseWorker<uint64_t>;
+template class TraverseWorker<uint32_t>;
 
 template class AggregateWorker<float>;
 template class AggregateWorker<double>;
 template class AggregateWorker<uint64_t>;
+template class AggregateWorker<uint32_t>;
 
 #endif  // WORKERS_HPP

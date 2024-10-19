@@ -4,7 +4,7 @@
 #include "GraphAlgorithm.hpp"
 
 #define DAMPING_FACTOR 0.85
-#define TOLERANCE      1e-3
+#define TOLERANCE      1e-6
 
 template<typename VertexProperty>
 class PageRank : public GraphAlgorithm<VertexProperty>
@@ -36,4 +36,4 @@ class PageRank : public GraphAlgorithm<VertexProperty>
 template class PageRank<float>;
 template class PageRank<double>;
 
-#endif  // PR_HPP
+#endif  // PR_HPP - 7261630600

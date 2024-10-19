@@ -100,7 +100,6 @@ void SSSP<VertexProperty>::update_frontier()
         {
           this->vertex_properties[lid] = this->vertex_updates[lid];
           this->frontier.push_back(lid);
-          this->vertex_updates[lid] = std::numeric_limits<VertexProperty>::max();
         }
       },
       galois::loopname("Update Frontier"),

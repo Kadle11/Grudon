@@ -179,6 +179,21 @@ add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/extern/Galois EXCLUDE_FROM_ALL)
 target_include_directories(${PROJECT_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/extern/Galois/include)
 target_link_libraries(${PROJECT_NAME} PRIVATE Galois::shmem)
 
+# Add METIS
+target_include_directories(${PROJECT_NAME} PRIVATE "/proj/prismgt-PG0/vrao79/metis-install/include")
+find_library(GKLIB GKlib "/proj/prismgt-PG0/vrao79/metis-install/lib")
+if(NOT GKLIB)
+  message(FATAL_ERROR "GKLib not found")
+endif()
+
+find_library(METIS metis "/proj/prismgt-PG0/vrao79/metis-install/lib")
+if(NOT METIS)
+  message(FATAL_ERROR "METIS not found")
+endif()
+
+target_link_libraries(${PROJECT_NAME} PRIVATE "${GKLIB}")
+target_link_libraries(${PROJECT_NAME} PRIVATE "${METIS}")
+
 # For Windows, it is necessary to link with the MultiThreaded library.
 # Depending on how the rest of the project's dependencies are linked, it might be necessary
 # to change the line to statically link with the library.

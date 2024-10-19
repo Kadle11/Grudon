@@ -79,7 +79,7 @@ class GraphAlgorithm
 template class GraphAlgorithm<float>;
 template class GraphAlgorithm<double>;
 template class GraphAlgorithm<uint64_t>;
-// template class GraphAlgorithm<uint32_t>;
+template class GraphAlgorithm<uint32_t>;
 
 
 #endif  // ALGORITHM_HPP

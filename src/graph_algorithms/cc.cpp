@@ -40,12 +40,12 @@ void CC<VertexProperty>::init()
 template<typename VertexProperty>
 void CC<VertexProperty>::apply_updates()
 {
-  // Print the Vertex Properties
-  for (GNode n = 0; n < this->worker->num_vertices; ++n)
-  {
-    spdlog::info(
-        "[Proc {}] Vertex {}: {}/{}", this->worker->node_id, n, this->vertex_properties[n], this->vertex_updates[n]);
-  }
+  // // Print the Vertex Properties
+  // for (GNode n = 0; n < this->worker->num_vertices; ++n)
+  // {
+  //   spdlog::info(
+  //       "[Proc {}] Vertex {}: {}/{}", this->worker->node_id, n, this->vertex_properties[n], this->vertex_updates[n]);
+  // }
 }
 
 template<typename VertexProperty>

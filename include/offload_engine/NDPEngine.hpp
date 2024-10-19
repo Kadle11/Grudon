@@ -39,7 +39,7 @@ OFFLOAD_DECISION NDPEngine(
   uint64_t memory_nodes_touched =
       std::count_if(mirrorCoverage.begin(), mirrorCoverage.end(), [](uint64_t v) { return v > 0; });
 
-  if (maxMirrorCoverage < (totalMirrorCoverage / memory_nodes_touched))
+  if (memory_nodes_touched == 0 || maxMirrorCoverage < (totalMirrorCoverage / memory_nodes_touched))
   {
     return NDP_OFFLOAD;
   }

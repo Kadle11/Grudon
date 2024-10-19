@@ -168,6 +168,7 @@ struct PropertyList
 template class PropertyList<float>;
 template class PropertyList<double>;
 template class PropertyList<uint64_t>;
+template class PropertyList<uint32_t>;
 
 class DistributedGraph
 {

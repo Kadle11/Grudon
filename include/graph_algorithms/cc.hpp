@@ -29,6 +29,6 @@ class CC : public GraphAlgorithm<VertexProperty>
 
 // Explicit Instantiation
 template class CC<uint64_t>;
-// template class CC<uint32_t>;
+template class CC<uint32_t>;
 
-#endif  // CC_HPP
+#endif  // CC_HPP - 782893248
