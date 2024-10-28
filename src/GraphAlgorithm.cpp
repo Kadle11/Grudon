@@ -186,7 +186,8 @@ void GraphAlgorithm<VertexProperty>::run()
       {
         worker->traverse(*this);
 
-        const galois::ThreadSafeOrderedSet<GNode> &updated_vertices = vertex_updates.getUpdatedVertices();
+        // const galois::ThreadSafeOrderedSet<GNode> &updated_vertices = vertex_updates.getUpdatedVertices();
+        const std::vector<GNode> updated_vertices = vertex_updates.getUpdatedVertices();
         spdlog::debug("[Proc {}] Updated Vertices: {}", this->worker->node_id, fmt_array(updated_vertices));
 
         for (const GNode &lid : updated_vertices)
@@ -215,8 +216,8 @@ void GraphAlgorithm<VertexProperty>::run()
       }
       else if (ndp_decision == NO_OFFLOAD)
       {
-        galois::ThreadSafeOrderedSet<GNode> &updated_vertices = vertex_properties.getUpdatedVertices();
-
+        // galois::ThreadSafeOrderedSet<GNode> &updated_vertices = vertex_properties.getUpdatedVertices();
+        std::vector<GNode> updated_vertices = vertex_properties.getUpdatedVertices();
         for (const GNode &lid : updated_vertices)
         {
           GNode gid = this->worker->distributed_graph->getGlobalNode(lid);

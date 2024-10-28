@@ -54,7 +54,7 @@ DistributedGraph::DistributedGraph(
     mirror_partition_sizes.resize(num_memory, 0);
     mirror_edge_counts.resize(num_memory, 0);
 
-    METISPartitioner(
+    NaivePartitioner(
         bgraph,
         num_compute,
         num_memory,

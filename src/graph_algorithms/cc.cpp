@@ -51,7 +51,8 @@ void CC<VertexProperty>::apply_updates()
 template<typename VertexProperty>
 void CC<VertexProperty>::gen_updates()
 {
-  galois::ThreadSafeOrderedSet<GNode> &updated_vertices = this->vertex_properties.getUpdatedVertices();
+  // galois::ThreadSafeOrderedSet<GNode> &updated_vertices = this->vertex_properties.getUpdatedVertices();
+  std::vector<GNode> updated_vertices = this->vertex_updates.getUpdatedVertices();
   galois::do_all(
       galois::iterate(updated_vertices.begin(), updated_vertices.end()),
       [&](GNode lid)
@@ -82,7 +83,8 @@ template<typename VertexProperty>
 void CC<VertexProperty>::update_frontier()
 {
   galois::substrate::SimpleLock lock;
-  galois::ThreadSafeOrderedSet<GNode> &updated_vertices = this->vertex_updates.getUpdatedVertices();
+  // galois::ThreadSafeOrderedSet<GNode> &updated_vertices = this->vertex_updates.getUpdatedVertices();
+  std::vector<GNode> updated_vertices = this->vertex_updates.getUpdatedVertices();
   galois::do_all(
       galois::iterate(updated_vertices.begin(), updated_vertices.end()),
       [&](GNode lid)
