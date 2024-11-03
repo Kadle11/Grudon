@@ -17,7 +17,7 @@ SSSP<VertexProperty>::SSSP(
 template<typename VertexProperty>
 void SSSP<VertexProperty>::init()
 {
-  // TODO: T 
+  // TODO: T
   // Initialize the Vertex Properties
   if (this->node_type == COMPUTE_NODE)
   {
@@ -41,14 +41,15 @@ void SSSP<VertexProperty>::init()
   {
     this->vertex_properties[0] = 0;
     this->vertex_updates[0] = 0;
-    this->frontier.push_back(0);
+    // this->frontier.push_back(0);
+    this->frontier.set(0);
   }
 }
 
 template<typename VertexProperty>
 void SSSP<VertexProperty>::apply_updates()
 {
-  // Print the Vertex Properties 
+  // Print the Vertex Properties
   // for (GNode n = 0; n < this->worker->num_vertices; ++n)
   // {
   //   spdlog::info(
@@ -101,14 +102,15 @@ void SSSP<VertexProperty>::update_frontier()
         if (this->vertex_properties[lid] > this->vertex_updates[lid])
         {
           this->vertex_properties[lid] = this->vertex_updates[lid];
-          this->frontier.push_back(lid);
+          // this->frontier.push_back(lid);
+          this->frontier.set(lid);
         }
       },
       galois::loopname("Update Frontier"),
       galois::no_stats(),
       galois::steal());
-
-  spdlog::debug("[Proc {}] Frontier: {}", this->worker->node_id, fmt_array(this->frontier));
+  std::vector<GNode> frontier_iter = this->frontier.getOffsets();
+  spdlog::debug("[Proc {}] Frontier: {}", this->worker->node_id, fmt_array(frontier_iter));
 }
 
 template<typename VertexProperty>
@@ -120,7 +122,8 @@ void SSSP<VertexProperty>::aggregate(GNode &lid, const VertexProperty &buffer_va
 template<typename VertexProperty>
 bool SSSP<VertexProperty>::termination_check()
 {
-  return this->frontier.empty();
+  // return this->frontier.empty();
+  return this->frontier.size() ? false : true;
 }
 
 template<typename VertexProperty>

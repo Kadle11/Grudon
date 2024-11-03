@@ -8,7 +8,7 @@
 // TODO: Are Galois Primitives faster than Std Primitives?
 
 OFFLOAD_DECISION NDPEngine(
-    galois::ThreadSafeOrderedSet<GNode>& frontier,
+    galois::DynamicBitSet& frontier,
     galois::LargeArray<bool>& coverage_vector,
     size_t& offload_threshold,
     DistributedGraph& distributed_graph,
@@ -19,14 +19,15 @@ OFFLOAD_DECISION NDPEngine(
     return NDP_OFFLOAD;
   }
 
-  if (!std::all_of(frontier.begin(), frontier.end(), [&](GNode v) { return coverage_vector[v]; }))
+  std::vector<GNode> frontier_iter = frontier.getOffsets();
+  if (!std::all_of(frontier_iter.begin(), frontier_iter.end(), [&](GNode v) { return coverage_vector[v]; }))
   {
     return NDP_OFFLOAD;
   }
 
   std::vector<uint64_t> mirrorCoverage(num_memory, 0);
 
-  for (const GNode& lid : frontier)
+  for (const GNode& lid : frontier_iter)
   {
     GNode gid = distributed_graph.getGlobalNode(lid);
     uint32_t worker_id = distributed_graph.getMirrorPartition(gid);

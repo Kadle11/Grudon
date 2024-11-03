@@ -30,7 +30,8 @@ void PageRank<VertexProperty>::init()
       {
         this->vertex_properties[n] = DAMPING_FACTOR * (1.0 - DAMPING_FACTOR) / this->worker->out_degrees[n];
         this->pr_vals[n] = 1.0 - DAMPING_FACTOR;
-        this->frontier.push_back(n);
+        // this->frontier.push_back(n);
+        this->frontier.set(n);
 
         this->vertex_updates[n] = 0.0;
         this->prev_updates[n] = 0.0;
@@ -57,9 +58,9 @@ void PageRank<VertexProperty>::apply_updates()
   // {
   //   spdlog::info("[Proc {}] Vertex {}: {}/{}", this->worker->node_id, n, this->pr_vals[n], this->vertex_updates[n]);
   // }
-
+  std::vector<GNode> frontier_iter = this->frontier.getOffsets();
   galois::do_all(
-      galois::iterate(this->frontier),
+      galois::iterate(frontier_iter),
       [&](GNode lid)
       {
         if (this->vertex_updates[lid] > TOLERANCE)
@@ -79,7 +80,7 @@ template<typename VertexProperty>
 void PageRank<VertexProperty>::gen_updates()
 {
   // galois::ThreadSafeOrderedSet<GNode> &updated_vertices = this->vertex_properties.getUpdatedVertices();
-  std::vector<unsigned int>updated_vertices = this->vertex_properties.getUpdatedVertices();
+  std::vector<unsigned int> updated_vertices = this->vertex_properties.getUpdatedVertices();
   galois::do_all(
       galois::iterate(updated_vertices.begin(), updated_vertices.end()),
       [&](GNode lid)
@@ -119,7 +120,8 @@ void PageRank<VertexProperty>::update_frontier()
         if (this->vertex_updates[lid] > TOLERANCE && this->prev_updates[lid] < TOLERANCE)
         {
           lock.lock();
-          this->frontier.push_back(lid);
+          // this->frontier.push_back(lid);
+          this->frontier.set(lid);
           lock.unlock();
 
           this->prev_updates[lid] = this->vertex_updates[lid];
@@ -128,8 +130,8 @@ void PageRank<VertexProperty>::update_frontier()
       galois::loopname("Update Frontier"),
       galois::no_stats(),
       galois::steal());
-
-  spdlog::debug("[Proc {}] Frontier: {}", this->worker->node_id, fmt_array(this->frontier));
+  std::vector<GNode> frontier_iter = this->frontier.getOffsets();
+  spdlog::debug("[Proc {}] Frontier: {}", this->worker->node_id, fmt_array(frontier_iter));
 }
 
 template<typename VertexProperty>
@@ -141,7 +143,8 @@ void PageRank<VertexProperty>::aggregate(GNode &lid, const VertexProperty &buffe
 template<typename VertexProperty>
 bool PageRank<VertexProperty>::termination_check()
 {
-  return this->frontier.empty();
+  // return this->frontier.empty();
+  return this->frontier.size() ? false : true;
 }
 
 template<typename VertexProperty>

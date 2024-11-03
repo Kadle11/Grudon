@@ -24,7 +24,8 @@ void CC<VertexProperty>::init()
     {
       this->vertex_properties[n] = this->worker->distributed_graph->getGlobalNode(n);
       this->vertex_updates[n] = std::numeric_limits<VertexProperty>::max();
-      this->frontier.push_back(n);
+      // this->frontier.push_back(n);
+      this->frontier.set(n);
     }
   }
   else if (this->node_type == MEMORY_NODE)
@@ -92,14 +93,15 @@ void CC<VertexProperty>::update_frontier()
         if (this->vertex_properties[lid] > this->vertex_updates[lid])
         {
           this->vertex_properties[lid] = this->vertex_updates[lid];
-          this->frontier.push_back(lid);
+          // this->frontier.push_back(lid);
+          this->frontier.set(lid);
         }
       },
       galois::loopname("Update Frontier"),
       galois::no_stats(),
       galois::steal());
-
-  spdlog::info("[Proc {}] Frontier: {}", this->worker->node_id, fmt_array(this->frontier));
+  std::vector<GNode> frontier_iter = this->frontier.getOffsets();
+  spdlog::info("[Proc {}] Frontier: {}", this->worker->node_id, fmt_array(frontier_iter));
 }
 
 template<typename VertexProperty>
@@ -111,7 +113,8 @@ void CC<VertexProperty>::aggregate(GNode &lid, const VertexProperty &buffer_val)
 template<typename VertexProperty>
 bool CC<VertexProperty>::termination_check()
 {
-  return this->frontier.empty();
+  // return this->frontier.empty();
+  return this->frontier.size() ? false : true;
 }
 
 template<typename VertexProperty>
