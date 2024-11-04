@@ -46,7 +46,8 @@ GraphAlgorithm<VertexProperty>::GraphAlgorithm(
   worker_completion_count = 0;
   num_workers = num_compute + num_memory;
 
-  frontier = galois::ThreadSafeOrderedSet<GNode>();
+  // frontier = galois::ThreadSafeOrderedSet<GNode>();
+  frontier.resize(worker->num_vertices);
   vertex_properties.allocate(worker->num_vertices);
   vertex_updates.allocate(worker->num_vertices);
   MPI_VERTEX_PROPERTY_T = mpi_get_type<VertexProperty>();
@@ -97,7 +98,7 @@ void GraphAlgorithm<VertexProperty>::run()
     // Send the Frontier to all Traversers
     if (node_type == COMPUTE_NODE)
     {
-      for (const GNode &lid : frontier)
+      for (const GNode lid : frontier.getOffsets())
       {
         GNode gid = worker->distributed_graph->getGlobalNode(lid);
         uint32_t worker_id = worker->getVertexMemoryPartition(gid);
@@ -186,7 +187,8 @@ void GraphAlgorithm<VertexProperty>::run()
       {
         worker->traverse(*this);
 
-        const galois::ThreadSafeOrderedSet<GNode> &updated_vertices = vertex_updates.getUpdatedVertices();
+        // const galois::ThreadSafeOrderedSet<GNode> &updated_vertices = vertex_updates.getUpdatedVertices();
+        const std::vector<GNode> updated_vertices = vertex_updates.getUpdatedVertices();
         spdlog::debug("[Proc {}] Updated Vertices: {}", this->worker->node_id, fmt_array(updated_vertices));
 
         for (const GNode &lid : updated_vertices)
@@ -215,8 +217,8 @@ void GraphAlgorithm<VertexProperty>::run()
       }
       else if (ndp_decision == NO_OFFLOAD)
       {
-        galois::ThreadSafeOrderedSet<GNode> &updated_vertices = vertex_properties.getUpdatedVertices();
-
+        // galois::ThreadSafeOrderedSet<GNode> &updated_vertices = vertex_properties.getUpdatedVertices();
+        std::vector<GNode> updated_vertices = vertex_properties.getUpdatedVertices();
         for (const GNode &lid : updated_vertices)
         {
           GNode gid = this->worker->distributed_graph->getGlobalNode(lid);
@@ -348,7 +350,8 @@ void GraphAlgorithm<VertexProperty>::run()
       {
         // Recive the Edges for the frontier from the Memory Nodes
         uint64_t max_out_degree = 0;
-        for (const GNode &lid : frontier)
+        std::vector<GNode> frontier_iter = frontier.getOffsets();
+        for (const GNode lid : frontier_iter)
         {
           max_out_degree = std::max(max_out_degree, worker->out_degrees[lid]);
         }
@@ -356,7 +359,7 @@ void GraphAlgorithm<VertexProperty>::run()
         std::vector<GNode> ebuffer;
         ebuffer.resize(max_out_degree + 1, 0);
 
-        for (const GNode &lid : frontier)
+        for (const GNode lid : frontier_iter)
         {
           GNode gid = worker->distributed_graph->getGlobalNode(lid);
           uint32_t worker_id = worker->getVertexMemoryPartition(gid);
@@ -406,7 +409,8 @@ void GraphAlgorithm<VertexProperty>::run()
 
     if (node_type == COMPUTE_NODE)
     {
-      this->frontier.clear();
+      // this->frontier.clear();
+      this->frontier.reset();
 
       worker->update(*this);
 
