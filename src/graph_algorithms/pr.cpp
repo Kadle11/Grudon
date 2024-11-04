@@ -119,10 +119,10 @@ void PageRank<VertexProperty>::update_frontier()
       {
         if (this->vertex_updates[lid] > TOLERANCE && this->prev_updates[lid] < TOLERANCE)
         {
-          lock.lock();
+          // lock.lock();
           // this->frontier.push_back(lid);
           this->frontier.set(lid);
-          lock.unlock();
+          // lock.unlock();
 
           this->prev_updates[lid] = this->vertex_updates[lid];
         }
@@ -144,7 +144,7 @@ template<typename VertexProperty>
 bool PageRank<VertexProperty>::termination_check()
 {
   // return this->frontier.empty();
-  return this->frontier.size() ? false : true;
+  return this->frontier.count() ? false : true;
 }
 
 template<typename VertexProperty>

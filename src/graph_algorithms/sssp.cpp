@@ -123,7 +123,7 @@ template<typename VertexProperty>
 bool SSSP<VertexProperty>::termination_check()
 {
   // return this->frontier.empty();
-  return this->frontier.size() ? false : true;
+  return this->frontier.count() ? false : true;
 }
 
 template<typename VertexProperty>

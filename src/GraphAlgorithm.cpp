@@ -98,7 +98,7 @@ void GraphAlgorithm<VertexProperty>::run()
     // Send the Frontier to all Traversers
     if (node_type == COMPUTE_NODE)
     {
-      for (const GNode &lid : frontier.getOffsets())
+      for (const GNode lid : frontier.getOffsets())
       {
         GNode gid = worker->distributed_graph->getGlobalNode(lid);
         uint32_t worker_id = worker->getVertexMemoryPartition(gid);
@@ -350,7 +350,8 @@ void GraphAlgorithm<VertexProperty>::run()
       {
         // Recive the Edges for the frontier from the Memory Nodes
         uint64_t max_out_degree = 0;
-        for (const GNode &lid : frontier.getOffsets())
+        std::vector<GNode> frontier_iter = frontier.getOffsets();
+        for (const GNode lid : frontier_iter)
         {
           max_out_degree = std::max(max_out_degree, worker->out_degrees[lid]);
         }
@@ -358,7 +359,7 @@ void GraphAlgorithm<VertexProperty>::run()
         std::vector<GNode> ebuffer;
         ebuffer.resize(max_out_degree + 1, 0);
 
-        for (const GNode &lid : frontier.getOffsets())
+        for (const GNode lid : frontier_iter)
         {
           GNode gid = worker->distributed_graph->getGlobalNode(lid);
           uint32_t worker_id = worker->getVertexMemoryPartition(gid);
