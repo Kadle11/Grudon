@@ -20,7 +20,8 @@ GraphAlgorithm<VertexProperty>::GraphAlgorithm(
       node_type(node_type),
       net(net),
       num_compute(num_compute),
-      num_memory(num_memory)
+      num_memory(num_memory),
+      graph_path(graph_path)
 {
   if (node_type == COMPUTE_NODE)
   {

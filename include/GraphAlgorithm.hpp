@@ -41,6 +41,7 @@ class GraphAlgorithm
   virtual void aggregate(GNode& lid, const VertexProperty& buffer_val) = 0;
   virtual bool termination_check() = 0;
   virtual void printState() = 0;
+  virtual void verify() = 0;
 
   void run();
 
@@ -50,6 +51,7 @@ class GraphAlgorithm
   PropertyList<VertexProperty> vertex_properties;
   PropertyList<VertexProperty> vertex_updates;
   Worker<VertexProperty>* worker;
+  std::string graph_path;
 
   NODE_TYPE node_type;
   MPI_Datatype MPI_VERTEX_PROPERTY_T;

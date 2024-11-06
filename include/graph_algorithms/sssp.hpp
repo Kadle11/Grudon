@@ -23,6 +23,7 @@ class SSSP : public GraphAlgorithm<VertexProperty>
   void aggregate(GNode &lid, const VertexProperty &buffer_val) override;
   bool termination_check() override;
   void printState() override;
+  void verify() override;
 
  private:
 };

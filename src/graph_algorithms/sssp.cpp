@@ -16,8 +16,7 @@ SSSP<VertexProperty>::SSSP(
 
 template<typename VertexProperty>
 void SSSP<VertexProperty>::init()
-{
-  // TODO: T 
+{ 
   // Initialize the Vertex Properties
   if (this->node_type == COMPUTE_NODE)
   {
@@ -135,4 +134,45 @@ void SSSP<VertexProperty>::printState()
           this->vertex_properties[n]);
     }
   }
+}
+
+template<typename VertexProperty>
+void SSSP<VertexProperty>::verify()
+{
+  // Check if Neighbor is dist(source) + 1
+
+  if (this->worker->node_type == MEMORY_NODE)
+  {
+    return;
+  }
+
+  Graph vGraph;
+  galois::graphs::readGraph(vGraph, this->graph_path);
+
+  galois::do_all(
+      galois::iterate(vGraph),
+      [&](const GNode &src)
+      {
+        VertexProperty sd = this->vertex_properties[src];
+        if (sd == std::numeric_limits<VertexProperty>::max())
+          return;
+
+        for (auto ii : vGraph.edges(src))
+        {
+          auto dst = vGraph.getEdgeDst(ii);
+          VertexProperty dd = this->vertex_properties[dst];
+          if (dd > sd + 1)
+          {
+            spdlog::error(
+                "Wrong label: {} on node: {}, correct label from src node {} is {}",
+                dd,
+                dst,
+                src,
+                sd + 1);
+          }
+        }
+      },
+      galois::loopname("Verification"),
+      galois::no_stats(),
+      galois::steal());
 }

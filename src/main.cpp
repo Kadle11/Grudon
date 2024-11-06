@@ -9,9 +9,9 @@
 #include "GraphAlgorithm.hpp"
 #include "MPI.hpp"
 #include "Workers.hpp"
+#include "graph_algorithms/cc.hpp"
 #include "graph_algorithms/pr.hpp"
 #include "graph_algorithms/sssp.hpp"
-#include "graph_algorithms/cc.hpp"
 
 int main(int argc, char **argv)
 {
@@ -123,12 +123,17 @@ int main(int argc, char **argv)
 
   // distributed_graph.printState();
 
-  GraphAlgorithm<uint32_t> *graph_algorithm = new SSSP<uint32_t>(node_type, "SSSP", graph_path, num_compute, num_memory, node_id,
-  net);
+  GraphAlgorithm<float> *graph_algorithm =
+      new PageRank<float>(node_type, "PageRank", graph_path, num_compute, num_memory, node_id, net);
 
   graph_algorithm->init();
   graph_algorithm->run();
-  graph_algorithm->printState();
+  // graph_algorithm->printState();
+
+  if (num_compute == 1)
+  {
+    graph_algorithm->verify();
+  }
 
   delete graph_algorithm;
 
