@@ -1,5 +1,7 @@
 #include "graph_algorithms/pr.hpp"
 
+#include <map>
+
 template<typename VertexProperty>
 PageRank<VertexProperty>::PageRank(
     NODE_TYPE node_type,
@@ -159,6 +161,36 @@ void PageRank<VertexProperty>::printState()
           this->worker->node_id,
           this->worker->distributed_graph->getGlobalNode(n),
           this->pr_vals[n]);
+    }
+  }
+}
+
+template<typename VertexProperty>
+void PageRank<VertexProperty>::verify()
+{
+  // Create a map of PageRank values to the Global Node ID
+  // Print the top 20 PageRank values
+
+  if (this->worker->node_type == MEMORY_NODE)
+  {
+    return;
+  }
+
+  std::map<VertexProperty, GNode> pr_map;
+  for (GNode n = 0; n < this->worker->num_vertices; ++n)
+  {
+    pr_map[this->pr_vals[n]] = this->worker->distributed_graph->getGlobalNode(n);
+  }
+
+  spdlog::info("Top 20 PageRank Values:");
+  int count = 0;
+  for (auto it = pr_map.rbegin(); it != pr_map.rend(); ++it)
+  {
+    spdlog::info("Node: {}, PR: {}", it->second, it->first);
+    count++;
+    if (count == 20)
+    {
+      break;
     }
   }
 }

@@ -132,3 +132,44 @@ void CC<VertexProperty>::printState()
     }
   }
 }
+
+template<typename VertexProperty>
+void CC<VertexProperty>::verify()
+{
+  // Verify that the neighbors have the same component
+
+  if (this->worker->node_type == MEMORY_NODE)
+  {
+    return;
+  }
+
+  Graph vGraph;
+  galois::graphs::readGraph(vGraph, this->graph_path);
+
+  galois::do_all(
+      galois::iterate(0ul, this->worker->num_vertices),
+      [&](GNode gid)
+      {
+        auto ii = vGraph.edge_begin(gid);
+        auto ei = vGraph.edge_end(gid);
+
+        for (; ii != ei; ++ii)
+        {
+          GNode dst = vGraph.getEdgeDst(ii);
+
+          if (this->vertex_properties[gid] != this->vertex_properties[dst])
+          {
+            spdlog::error(
+                "[Proc {}] Vertex {} and {} have different components: {} and {}",
+                this->worker->node_id,
+                gid,
+                dst,
+                this->vertex_properties[gid],
+                this->vertex_properties[dst]);
+          }
+        }
+      },
+      galois::loopname("Verify Connected Components"),
+      galois::no_stats(),
+      galois::steal());
+}
