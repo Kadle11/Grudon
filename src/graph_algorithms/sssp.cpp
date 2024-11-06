@@ -16,7 +16,7 @@ SSSP<VertexProperty>::SSSP(
 
 template<typename VertexProperty>
 void SSSP<VertexProperty>::init()
-{ 
+{
   // Initialize the Vertex Properties
   if (this->node_type == COMPUTE_NODE)
   {
@@ -47,7 +47,7 @@ void SSSP<VertexProperty>::init()
 template<typename VertexProperty>
 void SSSP<VertexProperty>::apply_updates()
 {
-  // Print the Vertex Properties 
+  // Print the Vertex Properties
   // for (GNode n = 0; n < this->worker->num_vertices; ++n)
   // {
   //   spdlog::info(
@@ -140,6 +140,8 @@ template<typename VertexProperty>
 void SSSP<VertexProperty>::verify()
 {
   // Check if Neighbor is dist(source) + 1
+  // Calc Max Dist
+  // Calc Total Visited Dist
 
   if (this->worker->node_type == MEMORY_NODE)
   {
@@ -148,6 +150,9 @@ void SSSP<VertexProperty>::verify()
 
   Graph vGraph;
   galois::graphs::readGraph(vGraph, this->graph_path);
+
+  galois::GAccumulator<VertexProperty> total_visited_dist;
+  galois::GReduceMax<VertexProperty> max_dist;
 
   galois::do_all(
       galois::iterate(vGraph),
@@ -163,16 +168,17 @@ void SSSP<VertexProperty>::verify()
           VertexProperty dd = this->vertex_properties[dst];
           if (dd > sd + 1)
           {
-            spdlog::error(
-                "Wrong label: {} on node: {}, correct label from src node {} is {}",
-                dd,
-                dst,
-                src,
-                sd + 1);
+            spdlog::error("Wrong label: {} on node: {}, correct label from src node {} is {}", dd, dst, src, sd + 1);
           }
         }
+
+        total_visited_dist += 1;
+        max_dist.update(sd);
       },
       galois::loopname("Verification"),
       galois::no_stats(),
       galois::steal());
+
+  spdlog::info("Max Dist: {}", max_dist.reduce());
+  spdlog::info("Total Visited Dist: {}", total_visited_dist.reduce());
 }
