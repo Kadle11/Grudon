@@ -47,7 +47,8 @@ class GraphAlgorithm
 
  protected:
   std::string algorithm_name;
-  galois::ThreadSafeOrderedSet<GNode> frontier;
+  // galois::ThreadSafeOrderedSet<GNode> frontier;
+  galois::DynamicBitSet frontier;
   PropertyList<VertexProperty> vertex_properties;
   PropertyList<VertexProperty> vertex_updates;
   Worker<VertexProperty>* worker;

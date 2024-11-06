@@ -123,8 +123,7 @@ int main(int argc, char **argv)
 
   // distributed_graph.printState();
 
-  GraphAlgorithm<uint64_t> *graph_algorithm =
-      new SSSP<uint64_t>(node_type, "SSSP", graph_path, num_compute, num_memory, node_id, net);
+  GraphAlgorithm<float_t> *graph_algorithm = new PageRank<float_t>(node_type, "PageRank", graph_path, num_compute, num_memory, node_id, net);
 
   graph_algorithm->init();
   graph_algorithm->run();
