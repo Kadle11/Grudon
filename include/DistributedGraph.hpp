@@ -17,6 +17,7 @@
 
 #include <galois/PriorityQueue.h>
 #include <galois/substrate/SimpleLock.h>
+#include <galois/DynamicBitset.h>
 
 #include <boost/iterator/counting_iterator.hpp>
 #include <set>
@@ -70,7 +71,8 @@ struct PropertyList
     if (val < data[n].v)
     {
       data[n].v = val;
-      updated_vertices.insert(n);
+      // updated_vertices.insert(n);
+      updated_vertices_bitset.set(n);
     }
   }
 
@@ -80,63 +82,79 @@ struct PropertyList
     if (val > data[n].v)
     {
       data[n].v = val;
-      updated_vertices.insert(n);
+      // updated_vertices.insert(n);
+      updated_vertices_bitset.set(n);
     }
   }
 
   void addUpdate(const GNode& n, const T& val)
   {
-    updated_vertices.insert(n);
-
+    // updated_vertices.insert(n);
+    updated_vertices_bitset.set(n);
     std::unique_lock<std::shared_mutex> lock(locks[n]);
     data[n].v += val;
   }
 
   void set(const GNode& n, const T& val)
   {
-    updated_vertices.insert(n);
-
+    // updated_vertices.insert(n);
+    updated_vertices_bitset.set(n);
     std::unique_lock<std::shared_mutex> lock(locks[n]);
     data[n].v = val;
   }
 
   void clear()
   {
+    auto bitvector = updated_vertices_bitset.getOffsets();
+    // galois::do_all(
+    //     galois::iterate(updated_vertices.begin(), updated_vertices.end()),
+    //     [&](const GNode& n)
+    //     {
+    //       std::unique_lock<std::shared_mutex> lock(locks[n]);
+    //       data[n].v = 0;
+    //     },
+    //     galois::loopname("Clear Updated Vertices"),
+    //     galois::no_stats(),
+    //     galois::steal());
     galois::do_all(
-        galois::iterate(updated_vertices.begin(), updated_vertices.end()),
+        galois::iterate(bitvector.begin(), bitvector.end()),
         [&](const GNode& n)
         {
-          std::unique_lock<std::shared_mutex> lock(locks[n]);
+          // std::unique_lock<std::shared_mutex> lock(locks[n]);
           data[n].v = 0;
         },
         galois::loopname("Clear Updated Vertices"),
         galois::no_stats(),
         galois::steal());
 
-    updated_vertices.clear();
+    // updated_vertices.clear();
+    updated_vertices_bitset.reset();
   }
 
   void clear_uv()
   {
-    updated_vertices.clear();
+    // updated_vertices.clear();
+    updated_vertices_bitset.reset();
   }
 
   size_t uv_size()
   {
-    return updated_vertices.size();
+    // return updated_vertices.size();
+    return updated_vertices_bitset.count();
   }
 
   void allocate(size_t size)
   {
     data.allocateInterleaved(size);
     locks = std::vector<std::shared_mutex>(size);
-
-    updated_vertices = galois::ThreadSafeOrderedSet<GNode>();
+    // updated_vertices = galois::ThreadSafeOrderedSet<GNode>();
+    updated_vertices_bitset.resize(size);
   }
 
   void addUpdatedVertex(const GNode& n)
   {
-    updated_vertices.insert(n);
+    // updated_vertices.insert(n);
+    updated_vertices_bitset.set(n);
   }
 
   using iterator = boost::counting_iterator<GNode>;
@@ -154,14 +172,18 @@ struct PropertyList
     return data.size();
   }
 
-  galois::ThreadSafeOrderedSet<GNode>& getUpdatedVertices()
+  // galois::ThreadSafeOrderedSet<GNode>& getUpdatedVertices()
+  // {
+  //   return updated_vertices;
+  // }
+  std::vector<GNode> getUpdatedVertices()
   {
-    return updated_vertices;
+    return updated_vertices_bitset.getOffsets();
   }
-
   galois::LargeArray<dataElement<T>> data;
-  galois::ThreadSafeOrderedSet<GNode> updated_vertices;
+  // galois::ThreadSafeOrderedSet<GNode> updated_vertices;
   std::vector<std::shared_mutex> locks;
+  galois::DynamicBitSet updated_vertices_bitset;
 };
 
 // Explicit Instantiation
