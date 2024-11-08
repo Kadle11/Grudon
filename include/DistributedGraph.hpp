@@ -231,7 +231,7 @@ class DistributedGraph
 
   Graph lgraph;
 
- private:
+ 
   size_t& num_compute;
   size_t& num_memory;
   uint64_t& num_vertices;

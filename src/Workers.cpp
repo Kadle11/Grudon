@@ -31,7 +31,46 @@ Worker<T>::Worker(
       out_degrees,
       coverage_vector,
       net);
+  // distributed_graph->printGraph();
+}
 
+template<typename T>
+Worker<T>::Worker(
+    std::string& graph_path,
+    size_t& num_compute,
+    size_t& num_memory,
+    uint32_t& node_id,
+    NODE_TYPE node_type,
+    MPICore& net,
+    DistributedGraph* graph)
+    : net(net),
+      node_id(node_id),
+      num_compute(num_compute),
+      num_memory(num_memory),
+      node_type(node_type),
+      distributed_graph(graph)
+{
+  num_vertices = distributed_graph->num_vertices;
+  total_vertices = distributed_graph->total_vertices;
+  num_edges = distributed_graph->num_edges;
+  sTranslationTable = distributed_graph->sTranslationTable;
+  rTranslationTable = distributed_graph->rTranslationTable;
+  if (node_type == MEMORY_NODE)
+  {
+    bitCommVector.resize(num_compute);
+    for (int i = 0; i < num_compute; i++)
+    {
+      bitCommVector[i].resize(this->sTranslationTable[i].size());
+    }
+  }
+  else if (node_type == COMPUTE_NODE)
+  {
+    bitCommVector.resize(num_memory);
+    for (int i = 0; i < num_memory; i++)
+    {
+      bitCommVector[i].resize(this->sTranslationTable[i].size());
+    }
+  }
   // distributed_graph->printGraph();
 }
 
@@ -61,7 +100,8 @@ UpdateWorker<T>::UpdateWorker(
     uint32_t& node_id,
     NODE_TYPE node_type,
     MPICore& net)
-    : Worker<T>(graph_path, num_compute, num_memory, node_id, node_type, net)
+    : Worker<T>(graph_path, num_compute, num_memory, node_id, node_type, net),
+      aggregator(graph_path, num_compute, num_memory, node_id, node_type, net, this->distributed_graph)
 {
 }
 
@@ -105,7 +145,7 @@ TraverseWorker<T>::TraverseWorker(
 template<typename T>
 void TraverseWorker<T>::traverse(GraphAlgorithm<T>& algorithm)
 {
-    algorithm.gen_updates();
+  algorithm.gen_updates();
 }
 
 template<typename T>
@@ -125,7 +165,7 @@ TraverseWorker<T>::~TraverseWorker()
 {
 }
 
-// AggregateWorker Functions
+// AggregateSwitch Functions
 template<typename T>
 AggregateWorker<T>::AggregateWorker(
     std::string& graph_path,
@@ -133,9 +173,15 @@ AggregateWorker<T>::AggregateWorker(
     size_t& num_memory,
     uint32_t& node_id,
     NODE_TYPE node_type,
-    MPICore& net)
-    : Worker<T>(graph_path, num_compute, num_memory, node_id, node_type, net)
+    MPICore& net,
+    DistributedGraph* graph)
+    : Worker<T>(graph_path, num_compute, num_memory, node_id, node_type, net, graph)
 {
+  propertyBuffers.resize(num_memory);
+  for (int i = 0; i < num_memory; ++i)
+  {
+    propertyBuffers[i].allocateLocal(this->sTranslationTable[i].size());
+  }
 }
 
 template<typename T>

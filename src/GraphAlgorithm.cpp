@@ -266,29 +266,43 @@ void GraphAlgorithm<VertexProperty>::run()
     }
     else if (node_type == COMPUTE_NODE)
     {
+      //Aggregator
+      UpdateWorker<VertexProperty> *updateWorker = dynamic_cast<UpdateWorker<VertexProperty> *>(worker);
+      AggregateWorker<VertexProperty> *aggregator = &(updateWorker->aggregator);
+      Worker<VertexProperty> *aggregator_parent = dynamic_cast<Worker<VertexProperty> *>(aggregator);
+      
       if (ndp_decision == NDP_OFFLOAD)
       {
         uint64_t bytes_recv = 0;
-
+        // auto aggregator = worker;
+        // auto aggregator_parent = worker;
+        UpdateWorker<VertexProperty> *updateWorker = dynamic_cast<UpdateWorker<VertexProperty> *>(worker);
+        AggregateWorker<VertexProperty> *aggregator = &(updateWorker->aggregator);
+        Worker<VertexProperty> *aggregator_parent = dynamic_cast<Worker<VertexProperty> *>(aggregator);
         for (int i = 0; i < num_memory; i++)
         {
           bytes_recv = net.recv(
               i + num_compute,
               0,
-              worker->bitCommVector[i].bitvec.data(),
-              worker->bitCommVector[i].size_bytes(),
+              aggregator->bitCommVector[i].bitvec.data(),
+              aggregator->bitCommVector[i].size_bytes(),
               MPI_UINT64_T,
               MPI_STATUS_IGNORE);
-
           bytes_recv += net.recv(
               i + num_compute,
               0,
-              propertyBuffers[i].data(),
-              propertyBuffers[i].size(),
+              aggregator->propertyBuffers[i].data(),
+              aggregator->propertyBuffers[i].size(),
               MPI_VERTEX_PROPERTY_T,
               MPI_STATUS_IGNORE);
-
-          size_t bitCommVectorSize = worker->bitCommVector[i].size();
+          // bytes_recv += net.recv(
+          //     i + num_compute,
+          //     0,
+          //     propertyBuffers[i].data(),
+          //     propertyBuffers[i].size(),
+          //     MPI_VERTEX_PROPERTY_T,
+          //     MPI_STATUS_IGNORE);
+          size_t bitCommVectorSize = aggregator->bitCommVector[i].size();
 
           if (switch_offload == INC_OFFLOAD)
           {
@@ -300,7 +314,7 @@ void GraphAlgorithm<VertexProperty>::run()
 
             for (size_t j = 0; j < bitCommVectorSize; j++)
             {
-              if (worker->bitCommVector[i].test(j))
+              if (aggregator->bitCommVector[i].test(j))
               {
                 spdlog::debug(
                     "[Proc {}/{}] Aggregating GVertex/CurrProp/Update: {}/{}/{} from {}",
@@ -308,11 +322,20 @@ void GraphAlgorithm<VertexProperty>::run()
                     iteration,
                     worker->distributed_graph->getGlobalNode(worker->rTranslationTable[i][j]),
                     vertex_updates[worker->rTranslationTable[i][j]],
-                    propertyBuffers[i][idxTracker[i]],
+                    aggregator->propertyBuffers[i][idxTracker[i]],
                     i);
+                // spdlog::debug(
+                //     "[Proc {}/{}] Aggregating GVertex/CurrProp/Update: {}/{}/{} from {}",
+                //     worker->node_id,
+                //     iteration,
+                //     worker->distributed_graph->getGlobalNode(worker->rTranslationTable[i][j]),
+                //     vertex_updates[worker->rTranslationTable[i][j]],
+                //     propertyBuffers[i][idxTracker[i]],
+                //     i);
 
                 GNode lid = worker->rTranslationTable[i][j];
-                worker->aggregate(*this, lid, propertyBuffers[i][idxTracker[i]]);
+                aggregator_parent->aggregate(*this, lid, aggregator->propertyBuffers[i][idxTracker[i]]);
+                // aggregator_parent->aggregate(*this, lid, propertyBuffers[i][idxTracker[i]]);
                 aggregate_bitset.set(lid);
                 idxTracker[i]++;
               }
@@ -328,19 +351,28 @@ void GraphAlgorithm<VertexProperty>::run()
           {
             for (size_t j = 0; j < bitCommVectorSize; j++)
             {
-              if (worker->bitCommVector[i].test(j))
+              if (aggregator->bitCommVector[i].test(j))
               {
                 spdlog::debug(
                     "[Proc {}/{}] Aggregating GVertex/CurrProp/Update: {}/{}/{} from {}",
                     worker->node_id,
                     iteration,
-                    worker->distributed_graph->getGlobalNode(worker->rTranslationTable[i][j]),
+                    aggregator->distributed_graph->getGlobalNode(aggregator->rTranslationTable[i][j]),
                     vertex_updates[worker->rTranslationTable[i][j]],
-                    propertyBuffers[i][idxTracker[i]],
+                    aggregator->propertyBuffers[i][idxTracker[i]],
                     i);
+                // spdlog::debug(
+                //     "[Proc {}/{}] Aggregating GVertex/CurrProp/Update: {}/{}/{} from {}",
+                //     worker->node_id,
+                //     iteration,
+                //     aggregator->distributed_graph->getGlobalNode(aggregator->rTranslationTable[i][j]),
+                //     vertex_updates[worker->rTranslationTable[i][j]],
+                //     propertyBuffers[i][idxTracker[i]],
+                //     i);
 
-                GNode lid = worker->rTranslationTable[i][j];
-                worker->aggregate(*this, lid, propertyBuffers[i][idxTracker[i]]);
+                GNode lid = aggregator->rTranslationTable[i][j];
+                aggregator_parent->aggregate(*this, lid, aggregator->propertyBuffers[i][idxTracker[i]]);
+                // aggregator_parent->aggregate(*this, lid, propertyBuffers[i][idxTracker[i]]);
                 idxTracker[i]++;
               }
             }
@@ -411,6 +443,9 @@ void GraphAlgorithm<VertexProperty>::run()
     if (node_type == COMPUTE_NODE)
     {
       // this->frontier.clear();
+      auto aggregator = worker;
+      // UpdateWorker<VertexProperty> *updateWorker = dynamic_cast<UpdateWorker<VertexProperty> *>(worker);
+      // AggregateWorker<VertexProperty> *aggregator = &(updateWorker->aggregator);
       this->frontier.reset();
 
       worker->update(*this);
@@ -423,6 +458,7 @@ void GraphAlgorithm<VertexProperty>::run()
       for (uint32_t i = 0; i < num_memory; i++)
       {
         worker->bitCommVector[i].reset();
+        aggregator->bitCommVector[i].reset();
       }
 
       idxTracker.assign(num_memory, 0);

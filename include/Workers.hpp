@@ -20,6 +20,14 @@ class Worker
       uint32_t& node_id,
       NODE_TYPE node_type,
       MPICore& net);
+  Worker(
+      std::string& graph_path,
+      size_t& num_compute,
+      size_t& num_memory,
+      uint32_t& node_id,
+      NODE_TYPE node_type,
+      MPICore& net,
+      DistributedGraph* graph);
   ~Worker();
 
   // FIXME: Avoid the Translation
@@ -49,6 +57,35 @@ class Worker
 };
 
 template<typename T>
+class AggregateWorker : public Worker<T>
+{
+ public:
+  AggregateWorker(
+      std::string& graph_path,
+      size_t& num_compute,
+      size_t& num_memory,
+      uint32_t& node_id,
+      NODE_TYPE node_type,
+      MPICore& net);
+  AggregateWorker(
+      std::string& graph_path,
+      size_t& num_compute,
+      size_t& num_memory,
+      uint32_t& node_id,
+      NODE_TYPE node_type,
+      MPICore& net,
+      DistributedGraph* graph);
+  ~AggregateWorker();
+  std::vector<galois::LargeArray<T>> propertyBuffers;
+ private:
+  void aggregate(GraphAlgorithm<T>& algorithm, GNode& lid, const T& buffer_val);
+
+  // Dummy Functions
+  void update(GraphAlgorithm<T>& algorithm) override;
+  void traverse(GraphAlgorithm<T>& algorithm) override;
+};
+
+template<typename T>
 class UpdateWorker : public Worker<T>
 {
  public:
@@ -60,7 +97,7 @@ class UpdateWorker : public Worker<T>
       NODE_TYPE node_type,
       MPICore& net);
   ~UpdateWorker();
-
+  AggregateWorker<T> aggregator;
  private:
   void update(GraphAlgorithm<T>& algorithm) override;
   void aggregate(GraphAlgorithm<T>& algorithm, GNode& lid, const T& buffer_val) override;
@@ -88,27 +125,6 @@ class TraverseWorker : public Worker<T>
   // Dummy Functions
   void update(GraphAlgorithm<T>& algorithm) override;
   void aggregate(GraphAlgorithm<T>& algorithm, GNode& lid, const T& buffer_val) override;
-};
-
-template<typename T>
-class AggregateWorker : public Worker<T>
-{
- public:
-  AggregateWorker(
-      std::string& graph_path,
-      size_t& num_compute,
-      size_t& num_memory,
-      uint32_t& node_id,
-      NODE_TYPE node_type,
-      MPICore& net);
-  ~AggregateWorker();
-
- private:
-  void aggregate(GraphAlgorithm<T>& algorithm, GNode& lid, const T& buffer_val);
-
-  // Dummy Functions
-  void update(GraphAlgorithm<T>& algorithm) override;
-  void traverse(GraphAlgorithm<T>& algorithm) override;
 };
 
 // Explicit Instantiation
