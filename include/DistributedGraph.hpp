@@ -15,10 +15,13 @@
  * 7. Conditional Message Passing depending on Sparse/Dense Communication
  */
 
+#include <galois/AtomicHelpers.h>
+#include <galois/DynamicBitset.h>
 #include <galois/PriorityQueue.h>
 #include <galois/substrate/SimpleLock.h>
-#include <galois/DynamicBitset.h>
+#include <spdlog/fmt/ostr.h>
 
+#include <atomic>
 #include <boost/iterator/counting_iterator.hpp>
 #include <set>
 #include <shared_mutex>
@@ -33,44 +36,77 @@
 using Graph = galois::graphs::LC_CSR_Graph<uint64_t, uint32_t>::with_no_lockable<true>::type;
 using GNode = Graph::GraphNode;
 
+// Create a AtomicElement Class
 template<typename T>
-struct dataElement : public galois::runtime::Lockable
+class AtomicElement : public std::atomic<T>
 {
  public:
-  using reference = T&;
-
-  T v;
-
-  reference getData()
+  AtomicElement() = default;
+  AtomicElement(const T& val) : std::atomic<T>(val)
   {
-    return v;
+  }
+
+  AtomicElement& operator=(const T& val)
+  {
+    std::atomic<T>::store(val, std::memory_order_relaxed);
+    return *this;
+  }
+
+  operator T() const
+  {
+    return std::atomic<T>::load(std::memory_order_relaxed);
+  }
+
+  AtomicElement& operator=(const AtomicElement& other)
+  {
+    std::atomic<T>::store(other.load(std::memory_order_relaxed), std::memory_order_relaxed);
+    return *this;
   }
 };
 
+// Formatter for AtomicElement
 template<typename T>
-struct PropertyList
+struct fmt::formatter<AtomicElement<T>>
+{
+  template<typename ParseContext>
+  constexpr auto parse(ParseContext& ctx)
+  {
+    return ctx.begin();
+  }
+
+  template<typename FormatContext>
+  auto format(const AtomicElement<T>& p, FormatContext& ctx)
+  {
+    return format_to(ctx.out(), "{}", static_cast<T>(p));
+  }
+};
+
+// Explicit Instantiation
+template class AtomicElement<float>;
+template class AtomicElement<double>;
+template class AtomicElement<uint64_t>;
+template class AtomicElement<uint32_t>;
+
+template<typename T>
+struct PropertyList : galois::LargeArray<AtomicElement<T>>
 {
  public:
-  PropertyList() = default;
+  // T operator[](const GNode& n) const
+  // {
+  //   return data[n];
+  // }
 
-  typename dataElement<T>::reference operator[](const GNode& n)
-  {
-    std::unique_lock<std::shared_mutex> lock(locks[n]);
-    return data[n].getData();
-  }
-
-  typename dataElement<T>::reference getData(const GNode& n, galois::MethodFlag mflag = galois::MethodFlag::READ)
-  {
-    std::shared_lock<std::shared_mutex> lock(locks[n]);
-    return data[n].getData();
-  }
+  // T operator[](const GNode& n)
+  // {
+  //   return data[n];
+  // }
 
   void minUpdate(const GNode& n, const T& val)
   {
-    std::unique_lock<std::shared_mutex> lock(locks[n]);
-    if (val < data[n].v)
+    const T& prev_val = galois::atomicMin(galois::LargeArray<AtomicElement<T>>::operator[](n), val);
+
+    if (val < prev_val)
     {
-      data[n].v = val;
       // updated_vertices.insert(n);
       updated_vertices_bitset.set(n);
     }
@@ -78,10 +114,10 @@ struct PropertyList
 
   void maxUpdate(const GNode& n, const T& val)
   {
-    std::unique_lock<std::shared_mutex> lock(locks[n]);
-    if (val > data[n].v)
+    const T& prev_val = galois::atomicMax(galois::LargeArray<AtomicElement<T>>::operator[](n), val);
+
+    if (val > prev_val)
     {
-      data[n].v = val;
       // updated_vertices.insert(n);
       updated_vertices_bitset.set(n);
     }
@@ -91,16 +127,15 @@ struct PropertyList
   {
     // updated_vertices.insert(n);
     updated_vertices_bitset.set(n);
-    std::unique_lock<std::shared_mutex> lock(locks[n]);
-    data[n].v += val;
+    galois::atomicAdd(galois::LargeArray<AtomicElement<T>>::operator[](n), val);
   }
 
   void set(const GNode& n, const T& val)
   {
     // updated_vertices.insert(n);
     updated_vertices_bitset.set(n);
-    std::unique_lock<std::shared_mutex> lock(locks[n]);
-    data[n].v = val;
+    AtomicElement<T>& element = galois::LargeArray<AtomicElement<T>>::operator[](n);
+    element.store(val);
   }
 
   void clear()
@@ -121,7 +156,7 @@ struct PropertyList
         [&](const GNode& n)
         {
           // std::unique_lock<std::shared_mutex> lock(locks[n]);
-          data[n].v = 0;
+          galois::LargeArray<AtomicElement<T>>::operator[](n) = 0;
         },
         galois::loopname("Clear Updated Vertices"),
         galois::no_stats(),
@@ -145,9 +180,8 @@ struct PropertyList
 
   void allocate(size_t size)
   {
-    data.allocateInterleaved(size);
-    locks = std::vector<std::shared_mutex>(size);
     // updated_vertices = galois::ThreadSafeOrderedSet<GNode>();
+    galois::LargeArray<AtomicElement<T>>::allocateLocal(size);
     updated_vertices_bitset.resize(size);
   }
 
@@ -164,25 +198,18 @@ struct PropertyList
   }
   iterator end()
   {
-    return iterator(data.size());
+    return iterator(galois::LargeArray<AtomicElement<T>>::size());
   }
 
   size_t size()
   {
-    return data.size();
+    return galois::LargeArray<AtomicElement<T>>::size();
   }
 
-  // galois::ThreadSafeOrderedSet<GNode>& getUpdatedVertices()
-  // {
-  //   return updated_vertices;
-  // }
   std::vector<GNode> getUpdatedVertices()
   {
     return updated_vertices_bitset.getOffsets();
   }
-  galois::LargeArray<dataElement<T>> data;
-  // galois::ThreadSafeOrderedSet<GNode> updated_vertices;
-  std::vector<std::shared_mutex> locks;
   galois::DynamicBitSet updated_vertices_bitset;
 };
 
