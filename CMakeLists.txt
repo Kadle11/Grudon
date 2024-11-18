@@ -161,6 +161,10 @@ include(cmake/Doxygen.cmake)
 # Remove Warnings for Executable
 target_compile_options(${PROJECT_NAME} PRIVATE -w)
 
+# Add MPI
+find_package(MPI REQUIRED)
+target_link_libraries(${PROJECT_NAME} PRIVATE MPI::MPI_CXX)
+
 # Add CXXOpts
 target_include_directories(${PROJECT_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/extern/cxxopts/include)
 
@@ -180,19 +184,21 @@ target_include_directories(${PROJECT_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/e
 target_link_libraries(${PROJECT_NAME} PRIVATE Galois::shmem)
 
 # Add METIS
-target_include_directories(${PROJECT_NAME} PRIVATE "/proj/prismgt-PG0/vrao79/metis-install/include")
-find_library(GKLIB GKlib "/proj/prismgt-PG0/vrao79/metis-install/lib")
-if(NOT GKLIB)
-  message(FATAL_ERROR "GKLib not found")
-endif()
+# target_include_directories(${PROJECT_NAME} PRIVATE "/nethome/vrao79/local/include")
+# find_library(GKLIB GKlib "/nethome/vrao79/local/lib")
+# if(NOT GKLIB)
+#  message(FATAL_ERROR "GKLib not found")
+# endif()
 
-find_library(METIS metis "/proj/prismgt-PG0/vrao79/metis-install/lib")
+find_library(METIS metis)
+find_path(METIS_INCLUDE_DIR metis.h)
 if(NOT METIS)
   message(FATAL_ERROR "METIS not found")
 endif()
 
-target_link_libraries(${PROJECT_NAME} PRIVATE "${GKLIB}")
-target_link_libraries(${PROJECT_NAME} PRIVATE "${METIS}")
+# target_link_libraries(${PROJECT_NAME} PRIVATE "${GKLIB}")
+target_link_libraries(${PROJECT_NAME} PRIVATE ${METIS})
+target_include_directories(${PROJECT_NAME} PRIVATE ${METIS_INCLUDE_DIR})
 
 # For Windows, it is necessary to link with the MultiThreaded library.
 # Depending on how the rest of the project's dependencies are linked, it might be necessary
