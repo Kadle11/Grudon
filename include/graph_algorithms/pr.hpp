@@ -24,6 +24,7 @@ class PageRank : public GraphAlgorithm<VertexProperty>
   void gen_updates() override;
   void update_frontier() override;
   void aggregate(GNode &lid, const VertexProperty &buffer_val) override;
+  VertexProperty aggregate_value(const VertexProperty &stored_val, const VertexProperty &buffer_val) override;
   bool termination_check() override;
   void printState() override;
   void verify() override;

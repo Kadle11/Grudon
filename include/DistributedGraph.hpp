@@ -76,6 +76,7 @@ struct PropertyList
     }
   }
 
+
   void maxUpdate(const GNode& n, const T& val)
   {
     std::unique_lock<std::shared_mutex> lock(locks[n]);

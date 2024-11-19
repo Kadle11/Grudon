@@ -1,11 +1,11 @@
 #ifndef ALGORITHM_HPP
 #define ALGORITHM_HPP
 
+#include <galois/PriorityQueue.h>
+
 #include "DistributedGraph.hpp"
 #include "Graph.hpp"
 #include "Workers.hpp"
-
-#include <galois/PriorityQueue.h>
 
 #define MAX_ITERATIONS 1000
 
@@ -39,6 +39,7 @@ class GraphAlgorithm
   virtual void gen_updates() = 0;
   virtual void update_frontier() = 0;
   virtual void aggregate(GNode& lid, const VertexProperty& buffer_val) = 0;
+  virtual VertexProperty aggregate_value(const VertexProperty& stored_val, const VertexProperty& buffer_val) = 0;
   virtual bool termination_check() = 0;
   virtual void printState() = 0;
   virtual void verify() = 0;
@@ -83,6 +84,5 @@ template class GraphAlgorithm<float>;
 template class GraphAlgorithm<double>;
 template class GraphAlgorithm<uint64_t>;
 template class GraphAlgorithm<uint32_t>;
-
 
 #endif  // ALGORITHM_HPP

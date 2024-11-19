@@ -77,9 +77,10 @@ class AggregateWorker : public Worker<T>
       DistributedGraph* graph);
   ~AggregateWorker();
   std::vector<galois::LargeArray<T>> propertyBuffers;
+  std::vector<std::pair<galois::DynamicBitSet, galois::LargeArray<T>>>  aggregate_chunkwise(GraphAlgorithm<T>& algorithm, const size_t& chunk_size);
+
  private:
   void aggregate(GraphAlgorithm<T>& algorithm, GNode& lid, const T& buffer_val);
-
   // Dummy Functions
   void update(GraphAlgorithm<T>& algorithm) override;
   void traverse(GraphAlgorithm<T>& algorithm) override;

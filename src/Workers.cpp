@@ -206,3 +206,78 @@ template<typename T>
 AggregateWorker<T>::~AggregateWorker()
 {
 }
+
+template<typename T>
+std::vector<std::pair<galois::DynamicBitSet, galois::LargeArray<T>>> AggregateWorker<T>::aggregate_chunkwise(
+    GraphAlgorithm<T>& algorithm,
+    const size_t& chunk_size)
+{
+  MPI_Datatype MPI_VERTEX_PROPERTY_T = mpi_get_type<T>();
+  std::vector<std::pair<galois::DynamicBitSet, galois::LargeArray<T>>> return_vector;
+  size_t bitCommVectorSize = this->sTranslationTable.size();
+  std::cout << "Loc1" << std::endl;
+  for (size_t start_memory_node = 0; start_memory_node < this->num_memory; start_memory_node += chunk_size)
+  {
+    galois::DynamicBitSet chunk_bitCommVector;
+    std::unordered_map<size_t, T> chunk_update_map;
+    galois::LargeArray<T> propertyBuffer;
+    chunk_bitCommVector.resize(bitCommVectorSize);
+    std::cout << "Loc2" << std::endl;
+    for (size_t i = start_memory_node; i < start_memory_node + chunk_size && i < this->num_memory; ++i)
+    {
+      std::cout << "Loc3" << std::endl;
+      galois::DynamicBitSet recv_bitCommVector;
+      galois::LargeArray<T> recv_propertyBuffer;
+      recv_bitCommVector.resize(bitCommVectorSize);
+      recv_propertyBuffer.allocateLocal(bitCommVectorSize);
+
+      this->net.recv(
+          i + this->num_compute,
+          0,
+          recv_bitCommVector.bitvec.data(),
+          recv_bitCommVector.size_bytes(),
+          MPI_UINT64_T,
+          MPI_STATUS_IGNORE);
+
+      this->net.recv(
+          i + this->num_compute,
+          0,
+          recv_propertyBuffer.data(),
+          recv_propertyBuffer.size() * sizeof(T),  // Ensure correct size in bytes
+          MPI_VERTEX_PROPERTY_T,
+          MPI_STATUS_IGNORE);
+
+      size_t idx = 0;
+      for (size_t j = 0; j < bitCommVectorSize; ++j)
+      {
+        if (recv_bitCommVector.test(j))
+        {
+          if (chunk_bitCommVector.test(j))
+          {
+            chunk_update_map[j] = algorithm.aggregate_value(chunk_update_map[j], recv_propertyBuffer[idx++]);
+          }
+          else
+          {
+            chunk_bitCommVector.set(j);
+            chunk_update_map[j] = recv_propertyBuffer[idx++];
+          }
+        }
+        std::cout << "Loc4" << std::endl;
+      }
+    }
+    std::cout << "Loc5" << std::endl;
+    size_t idx=0;
+    propertyBuffer.allocateLocal(chunk_bitCommVector.count());
+    for (size_t j = 0; j < bitCommVectorSize; ++j)
+    {
+      if (chunk_bitCommVector.test(j))
+      {
+        propertyBuffer[idx++] = chunk_update_map[j];
+      }
+    }
+    std::cout << "Loc6" << std::endl;
+    return_vector.push_back(std::make_pair(std::move(chunk_bitCommVector), std::move(propertyBuffer)));
+    std::cout << "Loc7" << std::endl;
+  }
+  return return_vector;
+}

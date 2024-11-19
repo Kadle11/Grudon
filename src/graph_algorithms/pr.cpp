@@ -143,6 +143,12 @@ void PageRank<VertexProperty>::aggregate(GNode &lid, const VertexProperty &buffe
 }
 
 template<typename VertexProperty>
+VertexProperty PageRank<VertexProperty>::aggregate_value(const VertexProperty &stored_val, const VertexProperty &buffer_val)
+{
+  return stored_val+buffer_val;
+}
+
+template<typename VertexProperty>
 bool PageRank<VertexProperty>::termination_check()
 {
   // return this->frontier.empty();
