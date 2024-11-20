@@ -8,6 +8,77 @@
 #include "offload_engine/NDPEngine.hpp"
 
 template<typename VertexProperty>
+void GraphAlgorithm<VertexProperty>::generatePerThreadMatrix(const std::vector<GNode> &vertices)
+{
+  size_t num_partitions;
+  size_t curr_vertices = vertices.size();
+  verticesPerThread = (curr_vertices > nGaloisThreads) ? curr_vertices / nGaloisThreads : 1;
+
+  if (node_type == COMPUTE_NODE)
+  {
+    num_partitions = num_memory;
+
+    for (size_t i = 0; i < num_memory; i++)
+    {
+      perThreadOffsetMatrix[i].assign(nGaloisThreads, 0);
+    }
+
+    galois::do_all(
+        galois::iterate(0ul, nGaloisThreads),
+        [&](const size_t j)
+        {
+          const size_t &start = j * verticesPerThread;
+          const size_t &end = (j + 1) * verticesPerThread > curr_vertices ? curr_vertices : (j + 1) * verticesPerThread;
+          size_t pID;  // Partition ID
+
+          for (size_t i = start; i < end; i++)
+          {
+            pID = worker->getVertexMemoryPartition(vertices[i]);
+            ++perThreadOffsetMatrix[pID][j];
+          }
+        },
+        galois::loopname("Generate Per Thread Matrix"),
+        galois::no_stats(),
+        galois::steal());
+  }
+  else if (node_type == MEMORY_NODE)
+  {
+    num_partitions = num_compute;
+
+    for (size_t i = 0; i < num_compute; i++)
+    {
+      perThreadOffsetMatrix[i].assign(nGaloisThreads, 0);
+    }
+
+    galois::do_all(
+        galois::iterate(0ul, nGaloisThreads),
+        [&](const size_t j)
+        {
+          const size_t &start = j * verticesPerThread;
+          const size_t &end = (j + 1) * verticesPerThread;
+          size_t pID;  // Partition ID
+
+          for (size_t i = start; i < end; i++)
+          {
+            pID = worker->getVertexComputePartition(vertices[i]);
+            ++perThreadOffsetMatrix[pID][j];
+          }
+        },
+        galois::loopname("Generate Per Thread Matrix"),
+        galois::no_stats(),
+        galois::steal());
+  }
+
+  for (size_t i = 0; i < num_partitions; i++)
+  {
+    for (size_t j = 1; j < nGaloisThreads; j++)
+    {
+      perThreadOffsetMatrix[i][j] += perThreadOffsetMatrix[i][j - 1];
+    }
+  }
+}
+
+template<typename VertexProperty>
 GraphAlgorithm<VertexProperty>::GraphAlgorithm(
     NODE_TYPE node_type,
     std::string algorithm_name,
@@ -23,22 +94,30 @@ GraphAlgorithm<VertexProperty>::GraphAlgorithm(
       num_memory(num_memory),
       graph_path(graph_path)
 {
+  nGaloisThreads = galois::getActiveThreads();
+  verticesPerThread = worker->num_vertices / nGaloisThreads;
+
   if (node_type == COMPUTE_NODE)
   {
     worker = new UpdateWorker<VertexProperty>(graph_path, num_compute, num_memory, node_id, node_type, net);
     propertyBuffers.resize(num_memory);
+    perThreadOffsetMatrix.resize(num_memory);
+
     for (int i = 0; i < num_memory; i++)
     {
       propertyBuffers[i].allocateLocal(worker->sTranslationTable[i].size());
+      perThreadOffsetMatrix[i].resize(nGaloisThreads, 0);
     }
   }
   else if (node_type == MEMORY_NODE)
   {
     worker = new TraverseWorker<VertexProperty>(graph_path, num_compute, num_memory, node_id, node_type, net);
     propertyBuffers.resize(num_compute);
+    perThreadOffsetMatrix.resize(num_compute);
     for (int i = 0; i < num_compute; i++)
     {
       propertyBuffers[i].allocateLocal(worker->sTranslationTable[i].size());
+      perThreadOffsetMatrix[i].resize(nGaloisThreads, 0);
     }
   }
 
@@ -99,40 +178,75 @@ void GraphAlgorithm<VertexProperty>::run()
     // Send the Frontier to all Traversers
     if (node_type == COMPUTE_NODE)
     {
-      for (const GNode lid : frontier.getOffsets())
-      {
-        GNode gid = worker->distributed_graph->getGlobalNode(lid);
-        uint32_t worker_id = worker->getVertexMemoryPartition(gid);
-        worker->bitCommVector[worker_id].set(worker->sTranslationTable[worker_id][lid]);
-        propertyBuffers[worker_id][idxTracker[worker_id]] = vertex_properties[lid];
-        idxTracker[worker_id]++;
+      const std::vector<GNode> &current_frontier = this->frontier.getOffsets();
+      generatePerThreadMatrix(current_frontier);
 
-        spdlog::debug(
-            "[Proc {}/{}] Sending GVertex/Trans/Property: {}/{}/{} to Memory Node: {}",
-            worker->node_id,
-            iteration,
-            gid,
-            worker->sTranslationTable[worker_id][lid],
-            vertex_properties[lid],
-            worker_id);
-      }
+      // for (const GNode lid : frontier.getOffsets())
+      // {
+      //   GNode gid = worker->distributed_graph->getGlobalNode(lid);
+      //   uint32_t worker_id = worker->getVertexMemoryPartition(gid);
+      //   worker->bitCommVector[worker_id].set(worker->sTranslationTable[worker_id][lid]);
+      //   propertyBuffers[worker_id][idxTracker[worker_id]] = vertex_properties[lid];
+      //   idxTracker[worker_id]++;
+
+      //   spdlog::debug(
+      //       "[Proc {}/{}] Sending GVertex/Trans/Property: {}/{}/{} to Memory Node: {}",
+      //       worker->node_id,
+      //       iteration,
+      //       gid,
+      //       worker->sTranslationTable[worker_id][lid],
+      //       vertex_properties[lid],
+      //       worker_id);
+      // }
+
+      galois::do_all(
+          galois::iterate(0ul, nGaloisThreads),
+          [&](const size_t tid)
+          {
+            for (int worker_id = 0; worker_id < num_memory; worker_id++)
+            {
+              const uint64_t &start = (tid == 0) ? 0 : perThreadOffsetMatrix[worker_id][tid - 1];
+              const uint64_t &end = perThreadOffsetMatrix[worker_id][tid];
+
+              for (uint64_t j = start; j < end; j++)
+              {
+                GNode lid = current_frontier[j];
+                GNode gid = worker->distributed_graph->getGlobalNode(lid);
+                worker->bitCommVector[worker_id].set(worker->sTranslationTable[worker_id][lid]);
+                propertyBuffers[worker_id][j] = vertex_properties[lid];
+
+                spdlog::debug(
+                    "[Proc {}/{}] Sending propertyBuffers: {}/{} to Memory Node: {}",
+                    worker->node_id,
+                    iteration,
+                    gid,
+                    vertex_properties[lid],
+                    worker_id);
+              }
+            }
+          });
 
       for (int i = 0; i < num_memory; i++)
       {
-        spdlog::debug(
-            "[Proc {}] Sending BitCommVector {} to Memory Node: {}",
-            worker->node_id,
-            fmt_array(worker->bitCommVector[i].bitvec),
-            i);
-
         net.send(
             i + num_compute, 0, worker->bitCommVector[i].bitvec.data(), worker->bitCommVector[i].size_bytes(), MPI_UINT64_T);
 
-        net.send(i + num_compute, 0, propertyBuffers[i].data(), idxTracker[i], MPI_VERTEX_PROPERTY_T);
+        spdlog::debug(
+            "[Proc {}/{}] Sending PropertyBuffer: {} to Memory Node: {}",
+            worker->node_id,
+            iteration,
+            fmt_array(propertyBuffers[i]),
+            i + num_compute);
+
+        net.send(
+            i + num_compute,
+            0,
+            propertyBuffers[i].data(),
+            perThreadOffsetMatrix[i][nGaloisThreads - 1],
+            MPI_VERTEX_PROPERTY_T);
+
         worker->bitCommVector[i].reset();
       }
-
-      idxTracker.assign(num_memory, 0);
     }
     else if (node_type == MEMORY_NODE)
     {
@@ -220,6 +334,9 @@ void GraphAlgorithm<VertexProperty>::run()
       {
         // galois::ThreadSafeOrderedSet<GNode> &updated_vertices = vertex_properties.getUpdatedVertices();
         std::vector<GNode> updated_vertices = vertex_properties.getUpdatedVertices();
+
+        spdlog::info("[Proc {}] Updated Vertices: {}", this->worker->node_id, updated_vertices.size());
+
         for (const GNode &lid : updated_vertices)
         {
           GNode gid = this->worker->distributed_graph->getGlobalNode(lid);
@@ -349,16 +466,17 @@ void GraphAlgorithm<VertexProperty>::run()
       }
       else if (ndp_decision == NO_OFFLOAD)
       {
-        // Recive the Edges for the frontier from the Memory Nodes
+        // TODO: Push this to init() and only do it once
         uint64_t max_out_degree = 0;
         std::vector<GNode> frontier_iter = frontier.getOffsets();
         for (const GNode lid : frontier_iter)
         {
           max_out_degree = std::max(max_out_degree, worker->out_degrees[lid]);
         }
-
         std::vector<GNode> ebuffer;
         ebuffer.resize(max_out_degree + 1, 0);
+
+        spdlog::info("[Proc {}] Frontier Size: {}", worker->node_id, frontier_iter.size());
 
         for (const GNode lid : frontier_iter)
         {

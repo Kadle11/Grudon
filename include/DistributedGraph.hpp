@@ -100,7 +100,6 @@ struct PropertyList : galois::LargeArray<AtomicElement<T>>
   // {
   //   return data[n];
   // }
-
   void minUpdate(const GNode& n, const T& val)
   {
     const T& prev_val = galois::atomicMin(galois::LargeArray<AtomicElement<T>>::operator[](n), val);
@@ -210,6 +209,7 @@ struct PropertyList : galois::LargeArray<AtomicElement<T>>
   {
     return updated_vertices_bitset.getOffsets();
   }
+
   galois::DynamicBitSet updated_vertices_bitset;
 };
 
