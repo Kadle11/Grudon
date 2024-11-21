@@ -134,7 +134,7 @@ struct PropertyList : galois::LargeArray<AtomicElement<T>>
     // updated_vertices.insert(n);
     updated_vertices_bitset.set(n);
     AtomicElement<T>& element = galois::LargeArray<AtomicElement<T>>::operator[](n);
-    element.store(val);
+    element.store(val, std::memory_order_relaxed);
   }
 
   void clear()

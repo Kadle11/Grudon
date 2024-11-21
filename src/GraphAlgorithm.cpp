@@ -55,7 +55,7 @@ void GraphAlgorithm<VertexProperty>::generatePerThreadMatrix(const std::vector<G
         [&](const size_t j)
         {
           const size_t &start = j * verticesPerThread;
-          const size_t &end = (j + 1) * verticesPerThread;
+          const size_t &end = (j + 1) * verticesPerThread > curr_vertices ? curr_vertices : (j + 1) * verticesPerThread;
           size_t pID;  // Partition ID
 
           for (size_t i = start; i < end; i++)
@@ -166,8 +166,8 @@ void GraphAlgorithm<VertexProperty>::run()
 
     if (node_type == COMPUTE_NODE)
     {
-      memory_offload =
-          NDPEngine(frontier, worker->coverage_vector, ndp_offload_threshold, *worker->distributed_graph, num_compute);
+      memory_offload = NDP_OFFLOAD;
+      //     NDPEngine(frontier, worker->coverage_vector, ndp_offload_threshold, *worker->distributed_graph, num_compute);
 
       // switch_offload = INCEngine(frontier, worker->out_degrees, *worker->distributed_graph, inc_offload_threshold);
     }
@@ -179,7 +179,6 @@ void GraphAlgorithm<VertexProperty>::run()
     if (node_type == COMPUTE_NODE)
     {
       const std::vector<GNode> &current_frontier = this->frontier.getOffsets();
-      generatePerThreadMatrix(current_frontier);
 
       // for (const GNode lid : frontier.getOffsets())
       // {
@@ -199,6 +198,8 @@ void GraphAlgorithm<VertexProperty>::run()
       //       worker_id);
       // }
 
+      generatePerThreadMatrix(current_frontier);
+
       galois::do_all(
           galois::iterate(0ul, nGaloisThreads),
           [&](const size_t tid)
@@ -211,7 +212,6 @@ void GraphAlgorithm<VertexProperty>::run()
               for (uint64_t j = start; j < end; j++)
               {
                 GNode lid = current_frontier[j];
-                GNode gid = worker->distributed_graph->getGlobalNode(lid);
                 worker->bitCommVector[worker_id].set(worker->sTranslationTable[worker_id][lid]);
                 propertyBuffers[worker_id][j] = vertex_properties[lid];
 
@@ -219,7 +219,7 @@ void GraphAlgorithm<VertexProperty>::run()
                     "[Proc {}/{}] Sending propertyBuffers: {}/{} to Memory Node: {}",
                     worker->node_id,
                     iteration,
-                    gid,
+                    worker->distributed_graph->getGlobalNode(lid),
                     vertex_properties[lid],
                     worker_id);
               }
@@ -228,15 +228,10 @@ void GraphAlgorithm<VertexProperty>::run()
 
       for (int i = 0; i < num_memory; i++)
       {
+        // spdlog::info("[Proc {}/{}] Property Buffers: {}", this->worker->node_id, i, fmt_array(propertyBuffers[i]));
+
         net.send(
             i + num_compute, 0, worker->bitCommVector[i].bitvec.data(), worker->bitCommVector[i].size_bytes(), MPI_UINT64_T);
-
-        spdlog::debug(
-            "[Proc {}/{}] Sending PropertyBuffer: {} to Memory Node: {}",
-            worker->node_id,
-            iteration,
-            fmt_array(propertyBuffers[i]),
-            i + num_compute);
 
         net.send(
             i + num_compute,
@@ -261,31 +256,42 @@ void GraphAlgorithm<VertexProperty>::run()
             MPI_STATUS_IGNORE);
         net.recv(i, 0, propertyBuffers[i].data(), propertyBuffers[i].size(), MPI_VERTEX_PROPERTY_T, MPI_STATUS_IGNORE);
 
-        size_t bitCommVectorSize = worker->bitCommVector[i].size();
+        // size_t bitCommVectorSize = worker->bitCommVector[i].size();
+        // for (size_t j = 0; j < bitCommVectorSize; j++)
+        // {
+        //   if (worker->bitCommVector[i].test(j))
+        //   {
+        //     spdlog::info(
+        //         "[Proc {}/{}] Updating GVertex/Trans/Property: {}/{}/{}",
+        //         worker->node_id,
+        //         iteration,
+        //         worker->distributed_graph->getGlobalNode(worker->rTranslationTable[i][j]),
+        //         j,
+        //         propertyBuffers[i][idxTracker[i]]);
 
-        spdlog::debug(
-            "[Proc {}] Received BitCommVector {} from Compute Node: {}",
-            worker->node_id,
-            fmt_array(worker->bitCommVector[i].bitvec),
-            i);
+        //     GNode lid = worker->rTranslationTable[i][j];
+        //     vertex_properties[lid].set(propertyBuffers[i][idxTracker[i]]);
+        //     idxTracker[i]++;
+        //   }
+        // }
 
-        for (size_t j = 0; j < bitCommVectorSize; j++)
-        {
-          if (worker->bitCommVector[i].test(j))
-          {
-            spdlog::debug(
-                "[Proc {}/{}] Updating GVertex/Trans/Property: {}/{}/{}",
-                worker->node_id,
-                iteration,
-                worker->distributed_graph->getGlobalNode(worker->rTranslationTable[i][j]),
-                j,
-                propertyBuffers[i][idxTracker[i]]);
+        const std::vector<GNode> &updated_property_vertices = worker->bitCommVector[i].getOffsets();
+        const size_t &nVertices = updated_property_vertices.size();
+        const size_t &uVerticesPerThread = (nVertices > nGaloisThreads) ? nVertices / nGaloisThreads : 1;
 
-            GNode lid = worker->rTranslationTable[i][j];
-            vertex_properties.set(lid, propertyBuffers[i][idxTracker[i]]);
-            idxTracker[i]++;
-          }
-        }
+        galois::do_all(
+            galois::iterate(0ul, nGaloisThreads),
+            [&](const size_t tid)
+            {
+              const size_t &start = tid * uVerticesPerThread;
+              const size_t &end = (tid + 1) * uVerticesPerThread > nVertices ? nVertices : (tid + 1) * uVerticesPerThread;
+
+              for (size_t j = start; j < end; j++)
+              {
+                GNode lid = worker->rTranslationTable[i][updated_property_vertices[j]];
+                vertex_properties.set(lid, propertyBuffers[i][j]);
+              }
+            });
 
         worker->bitCommVector[i].reset();
       }
@@ -304,30 +310,61 @@ void GraphAlgorithm<VertexProperty>::run()
 
         // const galois::ThreadSafeOrderedSet<GNode> &updated_vertices = vertex_updates.getUpdatedVertices();
         const std::vector<GNode> updated_vertices = vertex_updates.getUpdatedVertices();
-        spdlog::debug("[Proc {}] Updated Vertices: {}", this->worker->node_id, fmt_array(updated_vertices));
 
-        for (const GNode &lid : updated_vertices)
-        {
-          GNode gid = worker->distributed_graph->getGlobalNode(lid);
-          uint32_t worker_id = worker->getVertexComputePartition(gid);
-          worker->bitCommVector[worker_id].set(worker->sTranslationTable[worker_id][lid]);
-          propertyBuffers[worker_id][idxTracker[worker_id]] = vertex_updates[lid];
+        // for (const GNode &lid : updated_vertices)
+        // {
+        //   GNode gid = worker->distributed_graph->getGlobalNode(lid);
+        //   uint32_t worker_id = worker->getVertexComputePartition(gid);
+        //   worker->bitCommVector[worker_id].set(worker->sTranslationTable[worker_id][lid]);
+        //   propertyBuffers[worker_id][idxTracker[worker_id]] = vertex_updates[lid];
 
-          spdlog::debug(
-              "[Proc {}/{}] Sending GVertex/Update: {}/{} to Compute Node: {}",
-              worker->node_id,
-              iteration,
-              gid,
-              propertyBuffers[worker_id][idxTracker[worker_id]],
-              worker_id);
+        //   spdlog::debug(
+        //       "[Proc {}/{}] Sending GVertex/Update: {}/{} to Compute Node: {}",
+        //       worker->node_id,
+        //       iteration,
+        //       gid,
+        //       propertyBuffers[worker_id][idxTracker[worker_id]],
+        //       worker_id);
 
-          idxTracker[worker_id]++;
-        }
+        //   idxTracker[worker_id]++;
+        // }
+
+        // spdlog::info("[Proc {}] Updated Vertices: {}", this->worker->node_id, fmt_array(updated_vertices));
+
+        generatePerThreadMatrix(updated_vertices);
+
+        galois::do_all(
+            galois::iterate(0ul, nGaloisThreads),
+            [&](const size_t tid)
+            {
+              for (int worker_id = 0; worker_id < num_compute; worker_id++)
+              {
+                const uint64_t &start = (tid == 0) ? 0 : perThreadOffsetMatrix[worker_id][tid - 1];
+                const uint64_t &end = perThreadOffsetMatrix[worker_id][tid];
+
+                for (uint64_t j = start; j < end; j++)
+                {
+                  GNode lid = updated_vertices[j];
+                  worker->bitCommVector[worker_id].set(worker->sTranslationTable[worker_id][lid]);
+                  propertyBuffers[worker_id][j] = vertex_updates[lid];
+
+                  spdlog::debug(
+                      "[Proc {}/{}] Sending propertyBuffers: {}/{} to Compute Node: {}",
+                      worker->node_id,
+                      tid,
+                      worker->distributed_graph->getGlobalNode(lid),
+                      propertyBuffers[worker_id][j],
+                      worker_id);
+                }
+              }
+            });
 
         for (int i = 0; i < num_compute; i++)
         {
+          // spdlog::info("[Proc {}/{}] Property Buffers: {}", this->worker->node_id, i, fmt_array(propertyBuffers[i]));
+
           net.send(i, 0, worker->bitCommVector[i].bitvec.data(), worker->bitCommVector[i].size_bytes(), MPI_UINT64_T);
-          net.send(i, 0, propertyBuffers[i].data(), idxTracker[i], MPI_VERTEX_PROPERTY_T);
+          net.send(i, 0, propertyBuffers[i].data(), perThreadOffsetMatrix[i][nGaloisThreads - 1], MPI_VERTEX_PROPERTY_T);
         }
       }
       else if (ndp_decision == NO_OFFLOAD)
@@ -335,7 +372,7 @@ void GraphAlgorithm<VertexProperty>::run()
         // galois::ThreadSafeOrderedSet<GNode> &updated_vertices = vertex_properties.getUpdatedVertices();
         std::vector<GNode> updated_vertices = vertex_properties.getUpdatedVertices();
 
-        spdlog::info("[Proc {}] Updated Vertices: {}", this->worker->node_id, updated_vertices.size());
+        spdlog::info("[Proc {}] Updated Vertices: {}", this->worker->node_id, fmt_array(updated_vertices));
 
         for (const GNode &lid : updated_vertices)
         {
@@ -443,24 +480,45 @@ void GraphAlgorithm<VertexProperty>::run()
           }
           else
           {
-            for (size_t j = 0; j < bitCommVectorSize; j++)
-            {
-              if (worker->bitCommVector[i].test(j))
-              {
-                spdlog::debug(
-                    "[Proc {}/{}] Aggregating GVertex/CurrProp/Update: {}/{}/{} from {}",
-                    worker->node_id,
-                    iteration,
-                    worker->distributed_graph->getGlobalNode(worker->rTranslationTable[i][j]),
-                    vertex_updates[worker->rTranslationTable[i][j]],
-                    propertyBuffers[i][idxTracker[i]],
-                    i);
+            // for (size_t j = 0; j < bitCommVectorSize; j++)
+            // {
+            //   if (worker->bitCommVector[i].test(j))
+            //   {
+            //     spdlog::debug(
+            //         "[Proc {}/{}] Aggregating GVertex/CurrProp/Update: {}/{}/{} from {}",
+            //         worker->node_id,
+            //         iteration,
+            //         worker->distributed_graph->getGlobalNode(worker->rTranslationTable[i][j]),
+            //         vertex_updates[worker->rTranslationTable[i][j]],
+            //         propertyBuffers[i][idxTracker[i]],
+            //         i);
 
-                GNode lid = worker->rTranslationTable[i][j];
-                worker->aggregate(*this, lid, propertyBuffers[i][idxTracker[i]]);
-                idxTracker[i]++;
-              }
-            }
+            //     GNode lid = worker->rTranslationTable[i][j];
+            //     worker->aggregate(*this, lid, propertyBuffers[i][idxTracker[i]]);
+            //     idxTracker[i]++;
+            //   }
+            // }
+
+            const std::vector<GNode> updated_property_vertices = worker->bitCommVector[i].getOffsets();
+            const size_t &nVertices = updated_property_vertices.size();
+            const size_t &uVerticesPerThread = (nVertices > nGaloisThreads) ? nVertices / nGaloisThreads : 1;
+
+            // spdlog::info("[Proc {}] Updated Vertices: {}", this->worker->node_id, fmt_array(updated_property_vertices));
+
+            galois::do_all(
+                galois::iterate(0ul, nGaloisThreads),
+                [&](const size_t tid)
+                {
+                  const size_t &start = tid * uVerticesPerThread;
+                  const size_t &end =
+                      (tid + 1) * uVerticesPerThread > nVertices ? nVertices : (tid + 1) * uVerticesPerThread;
+
+                  for (size_t j = start; j < end; j++)
+                  {
+                    GNode lid = worker->rTranslationTable[i][updated_property_vertices[j]];
+                    worker->aggregate(*this, lid, propertyBuffers[i][j]);
+                  }
+                });
           }
         }
       }
