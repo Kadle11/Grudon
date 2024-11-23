@@ -63,7 +63,7 @@ DistributedGraph::DistributedGraph(
         master_partition_sizes,
         mirror_partition_sizes,
         mirror_edge_counts);
-
+        
     spdlog::info("Partitioned the across {} masters and {} mirrors", num_compute, num_memory);
   }
 
@@ -106,7 +106,7 @@ DistributedGraph::DistributedGraph(
 
     if (node_type == COMPUTE_NODE)
     {
-      mirror_partition.allocateInterleaved(total_vertices);
+      mirror_partition.allocateLocal(total_vertices);
       mirror_partition_sizes.resize(num_memory);
       translationTableSizes.resize(num_memory, 0);
       cross_node_mirrors.resize(num_memory);
@@ -116,7 +116,7 @@ DistributedGraph::DistributedGraph(
     }
     else if (node_type == MEMORY_NODE)
     {
-      master_partition.allocateInterleaved(total_vertices);
+      master_partition.allocateLocal(total_vertices);
       master_partition_sizes.resize(num_compute);
       translationTableSizes.resize(num_compute, 0);
       cross_node_mirrors.resize(1);
