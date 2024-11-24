@@ -245,8 +245,8 @@ class DistributedGraph
   GNode getGlobalNode(const GNode& lid);
   uint64_t getOutDegree(const GNode& lid);
 
-  uint64_t getMirrorPartition(const GNode& gid);
-  uint64_t getMasterPartition(const GNode& gid);
+  uint64_t getMirrorPartition(const GNode& lid);
+  uint64_t getMasterPartition(const GNode& lid);
 
   void printState();
   void printGraph();

@@ -63,7 +63,7 @@ DistributedGraph::DistributedGraph(
         master_partition_sizes,
         mirror_partition_sizes,
         mirror_edge_counts);
-        
+
     spdlog::info("Partitioned the across {} masters and {} mirrors", num_compute, num_memory);
   }
 
@@ -410,6 +410,34 @@ DistributedGraph::DistributedGraph(
         }
       }
     }
+
+    galois::LargeArray<GNode> new_master_partition;
+    galois::LargeArray<GNode> new_mirror_partition;
+
+    new_master_partition.allocateLocal(num_vertices);
+    new_mirror_partition.allocateLocal(num_vertices);
+
+    for (GNode lnode = 0; lnode < num_vertices; ++lnode)
+    {
+      GNode gnode = lid_to_gid[lnode];
+      GNode masterID = master_partition[gnode];
+      GNode mirrorID = mirror_partition[gnode];
+
+      new_master_partition[lnode] = masterID;
+      new_mirror_partition[lnode] = mirrorID;
+    }
+
+    master_partition.deallocate();
+    mirror_partition.deallocate();
+
+    master_partition.allocateLocal(num_vertices);
+    mirror_partition.allocateLocal(num_vertices);
+
+    std::copy(new_master_partition.begin(), new_master_partition.end(), master_partition.begin());
+    std::copy(new_mirror_partition.begin(), new_mirror_partition.end(), mirror_partition.begin());
+
+    new_master_partition.deallocate();
+    new_mirror_partition.deallocate();
   }
   else
   {
@@ -626,6 +654,24 @@ DistributedGraph::DistributedGraph(
 
     addrTranslationTableIdxs.clear();
     vbuffer.clear();
+
+    // Re-write the master/mirror partitions using the local node ids
+
+    galois::LargeArray<GNode> new_master_partition;
+    new_master_partition.allocateLocal(num_vertices);
+
+    for (GNode lnode = 0; lnode < num_vertices; ++lnode)
+    {
+      GNode gnode = lid_to_gid[lnode];
+      uint64_t masterID = master_partition[gnode];
+      new_master_partition[lnode] = masterID;
+    }
+
+    master_partition.deallocate();
+    master_partition.allocateLocal(num_vertices);
+
+    std::copy(new_master_partition.begin(), new_master_partition.end(), master_partition.begin());
+    new_master_partition.deallocate();
   }
   else if (node_type == COMPUTE_NODE)
   {
@@ -681,6 +727,22 @@ DistributedGraph::DistributedGraph(
     }
 
     addrTranslationTableIdxs.clear();
+
+    galois::LargeArray<GNode> new_mirror_partition;
+    new_mirror_partition.allocateLocal(num_vertices);
+
+    for (GNode lnode = 0; lnode < num_vertices; ++lnode)
+    {
+      GNode gnode = lid_to_gid[lnode];
+      GNode mirrorID = mirror_partition[gnode];
+      new_mirror_partition[lnode] = mirrorID;
+    }
+
+    mirror_partition.deallocate();
+    mirror_partition.allocateLocal(num_vertices);
+
+    std::copy(new_mirror_partition.begin(), new_mirror_partition.end(), mirror_partition.begin());
+    new_mirror_partition.deallocate();
   }
 
   if (node_type == MEMORY_NODE)
@@ -739,14 +801,14 @@ uint64_t DistributedGraph::getOutDegree(const GNode& lid)
   return out_degrees[lid];
 }
 
-uint64_t DistributedGraph::getMirrorPartition(const GNode& gid)
+uint64_t DistributedGraph::getMirrorPartition(const GNode& lid)
 {
-  return mirror_partition[gid];
+  return mirror_partition[lid];
 }
 
-uint64_t DistributedGraph::getMasterPartition(const GNode& gid)
+uint64_t DistributedGraph::getMasterPartition(const GNode& lid)
 {
-  return master_partition[gid];
+  return master_partition[lid];
 }
 
 DistributedGraph::~DistributedGraph()
