@@ -85,6 +85,7 @@ GraphAlgorithm<VertexProperty>::GraphAlgorithm(
 
   if (node_type == COMPUTE_NODE)
   {
+    nGaloisThreads /= 4;
     worker = new UpdateWorker<VertexProperty>(graph_path, num_compute, num_memory, node_id, node_type, net);
     verticesPerThread = worker->num_vertices / nGaloisThreads > 0 ? worker->num_vertices / nGaloisThreads : 1;
 
@@ -169,6 +170,8 @@ void GraphAlgorithm<VertexProperty>::run()
   uint32_t iteration = 0;
   size_t ndp_offload_threshold = worker->total_vertices / 20;
   uint64_t inc_offload_threshold = std::accumulate(worker->out_degrees.begin(), worker->out_degrees.end(), 0) / 20;
+
+  net.barrier();
 
   while (worker_completion_count != num_compute && iteration < MAX_ITERATIONS)
   {
