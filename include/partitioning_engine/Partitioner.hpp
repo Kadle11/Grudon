@@ -15,8 +15,8 @@ void NaivePartitioner(
     std::vector<uint64_t>& mirror_partition_sizes,
     std::vector<uint64_t>& mirror_edge_counts)
 {
-  master_partition.allocateInterleaved(graph.size());
-  mirror_partition.allocateInterleaved(graph.size());
+  master_partition.allocateLocal(graph.size());
+  mirror_partition.allocateLocal(graph.size());
 
   std::vector<galois::GAccumulator<uint64_t>> master_partition_sizes_accum(num_masters);
   std::vector<galois::GAccumulator<uint64_t>> mirror_partition_sizes_accum(num_mirrors);
@@ -120,8 +120,8 @@ void METISPartitioner(
     spdlog::error("METIS Partitioning Failed\n");
   }
 
-  master_partition.allocateInterleaved(graph.size());
-  mirror_partition.allocateInterleaved(graph.size());
+  master_partition.allocateLocal(graph.size());
+  mirror_partition.allocateLocal(graph.size());
 
   std::vector<galois::GAccumulator<uint64_t>> master_partition_sizes_accum(num_masters);
   std::vector<galois::GAccumulator<uint64_t>> mirror_partition_sizes_accum(num_mirrors);

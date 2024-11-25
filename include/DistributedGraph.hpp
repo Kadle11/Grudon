@@ -100,7 +100,6 @@ struct PropertyList : galois::LargeArray<AtomicElement<T>>
   // {
   //   return data[n];
   // }
-
   void minUpdate(const GNode& n, const T& val)
   {
     const T& prev_val = galois::atomicMin(galois::LargeArray<AtomicElement<T>>::operator[](n), val);
@@ -135,7 +134,7 @@ struct PropertyList : galois::LargeArray<AtomicElement<T>>
     // updated_vertices.insert(n);
     updated_vertices_bitset.set(n);
     AtomicElement<T>& element = galois::LargeArray<AtomicElement<T>>::operator[](n);
-    element.store(val);
+    element.store(val, std::memory_order_relaxed);
   }
 
   void clear()
@@ -210,6 +209,7 @@ struct PropertyList : galois::LargeArray<AtomicElement<T>>
   {
     return updated_vertices_bitset.getOffsets();
   }
+
   galois::DynamicBitSet updated_vertices_bitset;
 };
 
@@ -245,8 +245,8 @@ class DistributedGraph
   GNode getGlobalNode(const GNode& lid);
   uint64_t getOutDegree(const GNode& lid);
 
-  uint64_t getMirrorPartition(const GNode& gid);
-  uint64_t getMasterPartition(const GNode& gid);
+  uint64_t getMirrorPartition(const GNode& lid);
+  uint64_t getMasterPartition(const GNode& lid);
 
   void printState();
   void printGraph();
