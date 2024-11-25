@@ -54,6 +54,23 @@ class MPICore
     return local_count * rtype_size;
   }
 
+  int Isend(int dest, int tag, void* buf, int count, MPI_Datatype datatype, MPI_Request* request = NULL)
+  {
+    MPI_Type_size(datatype, &stype_size);
+    bytes_moved += count * stype_size;
+    return MPI_Isend(buf, count, datatype, dest, tag, MPI_COMM_WORLD, request);
+  }
+
+  uint64_t
+  Irecv(int source, int tag, void* buf, int count, MPI_Datatype datatype, MPI_Status* status, MPI_Request* request = NULL)
+  {
+    MPI_Irecv(buf, count, datatype, source, tag, MPI_COMM_WORLD, request);
+    MPI_Wait(request, status);
+    MPI_Get_count(status, datatype, &local_count);
+    MPI_Type_size(datatype, &rtype_size);
+    return local_count * rtype_size;
+  }
+
   void barrier()
   {
     MPI_Barrier(MPI_COMM_WORLD);

@@ -134,7 +134,7 @@ struct PropertyList : galois::LargeArray<AtomicElement<T>>
     // updated_vertices.insert(n);
     updated_vertices_bitset.set(n);
     AtomicElement<T>& element = galois::LargeArray<AtomicElement<T>>::operator[](n);
-    element.store(val);
+    element.store(val, std::memory_order_relaxed);
   }
 
   void clear()
@@ -245,8 +245,8 @@ class DistributedGraph
   GNode getGlobalNode(const GNode& lid);
   uint64_t getOutDegree(const GNode& lid);
 
-  uint64_t getMirrorPartition(const GNode& gid);
-  uint64_t getMasterPartition(const GNode& gid);
+  uint64_t getMirrorPartition(const GNode& lid);
+  uint64_t getMasterPartition(const GNode& lid);
 
   void printState();
   void printGraph();

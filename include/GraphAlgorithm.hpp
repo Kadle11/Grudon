@@ -69,7 +69,8 @@ class GraphAlgorithm
   std::vector<galois::LargeArray<VertexProperty>> propertyBuffers;
   galois::DynamicBitSet updatedVertices;
   bool clear_updates;
-  std::vector<std::vector<uint64_t>> perThreadOffsetMatrix;
+  std::vector<std::vector<galois::LargeArray<GNode>>> perThreadOffsetMatrix;
+  std::vector<std::vector<size_t>> perThreadVCounts;
   size_t nGaloisThreads;
   size_t verticesPerThread;
 
