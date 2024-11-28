@@ -19,9 +19,11 @@ DistributedGraph::DistributedGraph(
     uint64_t& num_edges,
     uint32_t& node_id,
     NODE_TYPE& node_type,
-    std::vector<galois::DynamicBitSet>& bitCommVector,
+    std::vector<galois::DynamicBitSet>& bitCommVector_Send,
+    std::vector<galois::DynamicBitSet>& bitCommVector_Recv,
     std::vector<std::unordered_map<GNode, GNode>>& sTranslationTable,
     std::vector<std::unordered_map<GNode, GNode>>& rTranslationTable,
+    std::vector<std::unordered_map<GNode, GNode>>& sAggrTranslationTable,
     galois::LargeArray<uint64_t>& out_degrees,
     galois::LargeArray<bool>& coverage_vector,
     MPICore& net)
@@ -29,9 +31,11 @@ DistributedGraph::DistributedGraph(
       num_memory(num_memory),
       node_id(node_id),
       node_type(node_type),
-      bitCommVector(bitCommVector),
+      bitCommVector_Send(bitCommVector_Send),
+      bitCommVector_Recv(bitCommVector_Recv),
       sTranslationTable(sTranslationTable),
       rTranslationTable(rTranslationTable),
+      sAggrTranslationTable(sAggrTranslationTable),
       out_degrees(out_degrees),
       coverage_vector(coverage_vector),
       num_vertices(num_vertices),
@@ -591,13 +595,16 @@ DistributedGraph::DistributedGraph(
   {
     sTranslationTable.resize(num_compute);
     rTranslationTable.resize(num_compute);
+    sAggrTranslationTable.resize(num_compute);
     std::vector<uint64_t> addrTranslationTableIdxs(num_compute, 0);
+    std::vector<uint64_t> aggrAddrTranslationTableIdxs(num_compute, 0);
 
     // Reserve the Translation Table Sizes
     for (size_t i = 0; i < num_compute; i++)
     {
       sTranslationTable[i].reserve(translationTableSizes[i]);
       rTranslationTable[i].reserve(translationTableSizes[i]);
+      sAggrTranslationTable[i].reserve(master_partition_sizes[i]);
     }
 
     // std::sort(vbuffer.begin(), vbuffer.end());
@@ -618,7 +625,16 @@ DistributedGraph::DistributedGraph(
 
       addrTranslationTableIdxs[masterID]++;
     }
-
+    std::cout << "before saggr" << std::endl;
+    for (int64_t gnode = 0; gnode < master_partition.size(); gnode++)
+    {
+      GNode lnode = gid_to_lid[gnode];
+      uint64_t masterID = master_partition[gnode];
+      sAggrTranslationTable[masterID][lnode] = aggrAddrTranslationTableIdxs[masterID];
+      std::cout << "INIT LM: " << lnode << " LC: " <<aggrAddrTranslationTableIdxs[masterID] << std::endl;
+      aggrAddrTranslationTableIdxs[masterID]++;
+    }
+    std::cout << "after saggr" << std::endl;
     for (int i = 0; i < num_compute; i++)
     {
       assert(addrTranslationTableIdxs[i] == translationTableSizes[i]);
@@ -685,18 +701,22 @@ DistributedGraph::DistributedGraph(
 
   if (node_type == MEMORY_NODE)
   {
-    bitCommVector.resize(num_compute);
+    bitCommVector_Send.resize(num_compute);
+    bitCommVector_Recv.resize(num_compute);
     for (int i = 0; i < num_compute; i++)
     {
-      bitCommVector[i].resize(translationTableSizes[i]);
+      bitCommVector_Send[i].resize(master_partition_sizes[i]);
+      bitCommVector_Recv[i].resize(translationTableSizes[i]);
     }
   }
   else if (node_type == COMPUTE_NODE)
   {
-    bitCommVector.resize(num_memory);
+    bitCommVector_Send.resize(num_memory);
+    bitCommVector_Recv.resize(num_memory);
     for (int i = 0; i < num_memory; i++)
     {
-      bitCommVector[i].resize(translationTableSizes[i]);
+      bitCommVector_Send[i].resize(translationTableSizes[i]);
+      bitCommVector_Recv[i].resize(num_vertices);
     }
   }
 
