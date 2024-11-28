@@ -250,6 +250,8 @@ std::vector<std::pair<galois::DynamicBitSet, galois::LargeArray<T>>> AggregateWo
   {
     aggregatePropertyBuffer[elem.first] = elem.second;
   }
-  result.emplace_back(std::move(aggregateBitCommVector), std::move(aggregatePropertyBuffer));
+  result.emplace_back(
+      std::move(aggregateBitCommVector),
+      galois::LargeArray<T>(aggregatePropertyBuffer.data(), aggregatePropertyBuffer.size()));
   return result;
 }

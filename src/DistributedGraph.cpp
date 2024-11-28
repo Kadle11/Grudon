@@ -624,17 +624,14 @@ DistributedGraph::DistributedGraph(
       //     masterID);
 
       addrTranslationTableIdxs[masterID]++;
-    }
-    std::cout << "before saggr" << std::endl;
+    }\
     for (int64_t gnode = 0; gnode < master_partition.size(); gnode++)
     {
       GNode lnode = gid_to_lid[gnode];
       uint64_t masterID = master_partition[gnode];
       sAggrTranslationTable[masterID][lnode] = aggrAddrTranslationTableIdxs[masterID];
-      std::cout << "INIT LM: " << lnode << " LC: " <<aggrAddrTranslationTableIdxs[masterID] << std::endl;
       aggrAddrTranslationTableIdxs[masterID]++;
     }
-    std::cout << "after saggr" << std::endl;
     for (int i = 0; i < num_compute; i++)
     {
       assert(addrTranslationTableIdxs[i] == translationTableSizes[i]);
