@@ -1,6 +1,8 @@
 #ifndef PARTITIONER_HPP
 #define PARTITIONER_HPP
 
+#include <fstream>
+
 #include "Graph.hpp"
 #include "Logger.hpp"
 #include "metis.h"
@@ -64,60 +66,96 @@ void METISPartitioner(
     galois::LargeArray<GNode>& master_partition,
     std::vector<uint64_t>& master_partition_sizes,
     std::vector<uint64_t>& mirror_partition_sizes,
-    std::vector<uint64_t>& mirror_edge_counts)
+    std::vector<uint64_t>& mirror_edge_counts,
+    std::string partitioning_scheme_file = "")
 {
-  std::vector<idx_t> partitions(graph.size());
-  std::vector<idx_t> xadj;
-  std::vector<idx_t> adjncy;
-
-  idx_t num_nodes = graph.size();
-
-  xadj.reserve(num_nodes + 1);
-
-  idx_t curr_offset = 0;
-  xadj.push_back(curr_offset);
-
-  for (auto n : graph)
+  if (num_mirrors == 1)
   {
-    curr_offset += std::distance(graph.edges(n).begin(), graph.edges(n).end());
-    xadj.push_back(curr_offset);
-
-    for (auto e : graph.edges(n))
-    {
-      adjncy.push_back(graph.getEdgeDst(e));
-    }
+    NaivePartitioner(
+        graph,
+        num_masters,
+        num_mirrors,
+        mirror_partition,
+        master_partition,
+        master_partition_sizes,
+        mirror_partition_sizes,
+        mirror_edge_counts);
+    return;
   }
 
-  idx_t options[METIS_NOPTIONS];
+  std::vector<idx_t> partitions(graph.size());
 
-  idx_t ncon = 1;
-  idx_t nparts = num_mirrors;
-  idx_t objval;
-
-  METIS_SetDefaultOptions(options);
-
-  int res = METIS_PartGraphRecursive(
-      &num_nodes,
-      &ncon,
-      xadj.data(),
-      adjncy.data(),
-      NULL,
-      NULL,
-      NULL,
-      &nparts,
-      NULL,
-      NULL,
-      options,
-      &objval,
-      partitions.data());
-
-  if (res == METIS_OK)
+  if (!partitioning_scheme_file.empty())
   {
-    spdlog::info("METIS Partitioning Complete\n");
+    std::ifstream file(partitioning_scheme_file);
+    if (!file.is_open())
+    {
+      spdlog::error("Failed to open partitioning scheme file: {}", partitioning_scheme_file);
+      return;
+    }
+
+    // Each line in the file is a partition assignment for a node
+    for (idx_t i = 0; i < graph.size(); ++i)
+    {
+      file >> partitions[i];
+    }
+
+    spdlog::info("Partitioning Scheme Loaded from File: {}", partitioning_scheme_file);
   }
   else
   {
-    spdlog::error("METIS Partitioning Failed\n");
+    std::vector<idx_t> xadj;
+    std::vector<idx_t> adjncy;
+
+    idx_t num_nodes = graph.size();
+
+    xadj.reserve(num_nodes + 1);
+
+    idx_t curr_offset = 0;
+    xadj.push_back(curr_offset);
+
+    for (auto n : graph)
+    {
+      curr_offset += std::distance(graph.edges(n).begin(), graph.edges(n).end());
+      xadj.push_back(curr_offset);
+
+      for (auto e : graph.edges(n))
+      {
+        adjncy.push_back(graph.getEdgeDst(e));
+      }
+    }
+
+    idx_t options[METIS_NOPTIONS];
+
+    idx_t ncon = 1;
+    idx_t nparts = num_mirrors;
+    idx_t objval;
+
+    METIS_SetDefaultOptions(options);
+
+    int res = METIS_PartGraphKway(
+        &num_nodes,
+        &ncon,
+        xadj.data(),
+        adjncy.data(),
+        NULL,
+        NULL,
+        NULL,
+        &nparts,
+        NULL,
+        NULL,
+        options,
+        &objval,
+        partitions.data());
+
+    if (res == METIS_OK)
+    {
+      spdlog::info("METIS Partitioning Complete\n");
+    }
+    else
+    {
+      spdlog::error("METIS Partitioning Failed\n");
+    }
   }
 
   master_partition.allocateLocal(graph.size());

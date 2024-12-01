@@ -8,8 +8,9 @@ CC<VertexProperty>::CC(
     size_t num_compute,
     size_t num_memory,
     uint32_t node_id,
-    MPICore &net)
-    : GraphAlgorithm<VertexProperty>(node_type, algorithm_name, graph_path, num_compute, num_memory, node_id, net)
+    MPICore &net,
+    std::string partitioning_scheme_file)
+    : GraphAlgorithm<VertexProperty>(node_type, algorithm_name, graph_path, num_compute, num_memory, node_id, net, partitioning_scheme_file)
 {
   this->algorithm_name = "CC";
 }
@@ -53,13 +54,15 @@ template<typename VertexProperty>
 void CC<VertexProperty>::gen_updates()
 {
   // galois::ThreadSafeOrderedSet<GNode> &updated_vertices = this->vertex_properties.getUpdatedVertices();
-  std::vector<GNode> updated_vertices = this->vertex_updates.getUpdatedVertices();
+  std::vector<GNode> updated_vertices = this->vertex_properties.getUpdatedVertices();
   galois::do_all(
       galois::iterate(updated_vertices.begin(), updated_vertices.end()),
       [&](GNode lid)
       {
         auto ii = this->worker->distributed_graph->lgraph.edge_begin(lid);
         auto ei = this->worker->distributed_graph->lgraph.edge_end(lid);
+
+        VertexProperty min_val = this->vertex_properties[lid];
         for (; ii != ei; ++ii)
         {
           GNode dst = this->worker->distributed_graph->lgraph.getEdgeDst(ii);
@@ -72,7 +75,7 @@ void CC<VertexProperty>::gen_updates()
           //     this->vertex_properties[lid],
           //     this->vertex_updates[dst]);
 
-          this->vertex_updates.minUpdate(dst, this->vertex_properties[lid]);
+          this->vertex_updates.minUpdate(dst, min_val);
         }
       },
       galois::loopname("Generate Updates"),
@@ -90,9 +93,10 @@ void CC<VertexProperty>::update_frontier()
       galois::iterate(updated_vertices.begin(), updated_vertices.end()),
       [&](GNode lid)
       {
-        if (this->vertex_properties[lid] > this->vertex_updates[lid])
+        VertexProperty update_val = this->vertex_updates[lid];
+        if (this->vertex_properties[lid] > update_val)
         {
-          this->vertex_properties[lid] = this->vertex_updates[lid];
+          this->vertex_properties[lid] = update_val;
           // this->frontier.push_back(lid);
           this->frontier.set(lid);
         }
@@ -100,8 +104,6 @@ void CC<VertexProperty>::update_frontier()
       galois::loopname("Update Frontier"),
       galois::no_stats(),
       galois::steal());
-  std::vector<GNode> frontier_iter = this->frontier.getOffsets();
-  spdlog::info("[Proc {}] Frontier: {}", this->worker->node_id, fmt_array(frontier_iter));
 }
 
 template<typename VertexProperty>

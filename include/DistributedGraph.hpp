@@ -236,7 +236,8 @@ class DistributedGraph
       std::vector<std::unordered_map<GNode, GNode>>& rTranslationTable,
       galois::LargeArray<uint64_t>& out_degrees,
       galois::LargeArray<bool>& coverage_vector,
-      MPICore& net);
+      MPICore& net,
+      std::string& partitioning_scheme_file);
   ~DistributedGraph();
 
   bool isCoverageComplete(std::vector<GNode>& frontier);

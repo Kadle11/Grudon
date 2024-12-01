@@ -7,14 +7,14 @@ template<typename VertexProperty>
 class CC : public GraphAlgorithm<VertexProperty>
 {
  public:
-  CC(
-      NODE_TYPE node_type,
-      std::string algorithm_name,
-      std::string graph_path,
-      size_t num_compute,
-      size_t num_memory,
-      uint32_t node_id,
-      MPICore &net);
+  CC(NODE_TYPE node_type,
+     std::string algorithm_name,
+     std::string graph_path,
+     size_t num_compute,
+     size_t num_memory,
+     uint32_t node_id,
+     MPICore &net,
+     std::string partitioning_scheme_file = "");
 
   void init() override;
   void apply_updates() override;

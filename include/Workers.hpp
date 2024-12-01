@@ -19,7 +19,8 @@ class Worker
       size_t& num_memory,
       uint32_t& node_id,
       NODE_TYPE node_type,
-      MPICore& net);
+      MPICore& net,
+      std::string partitioning_scheme_file = "");
   ~Worker();
 
   // FIXME: Avoid the Translation
@@ -58,7 +59,8 @@ class UpdateWorker : public Worker<T>
       size_t& num_memory,
       uint32_t& node_id,
       NODE_TYPE node_type,
-      MPICore& net);
+      MPICore& net,
+      std::string& partitioning_scheme_file);
   ~UpdateWorker();
 
  private:
@@ -79,7 +81,8 @@ class TraverseWorker : public Worker<T>
       size_t& num_memory,
       uint32_t& node_id,
       NODE_TYPE node_type,
-      MPICore& net);
+      MPICore& net,
+      std::string& partitioning_scheme_file);
   ~TraverseWorker();
 
  private:

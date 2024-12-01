@@ -32,7 +32,8 @@ class GraphAlgorithm
       size_t num_compute,
       size_t num_memory,
       uint32_t node_id,
-      MPICore& net);
+      MPICore& net,
+      std::string& partitioning_scheme_file);
 
   virtual void init() = 0;
   virtual void apply_updates() = 0;

@@ -10,8 +10,9 @@ PageRank<VertexProperty>::PageRank(
     size_t num_compute,
     size_t num_memory,
     uint32_t node_id,
-    MPICore &net)
-    : GraphAlgorithm<VertexProperty>(node_type, algorithm_name, graph_path, num_compute, num_memory, node_id, net)
+    MPICore &net,
+    std::string partitioning_scheme_file)
+    : GraphAlgorithm<VertexProperty>(node_type, algorithm_name, graph_path, num_compute, num_memory, node_id, net, partitioning_scheme_file)
 {
   this->algorithm_name = "PageRank";
 }
@@ -90,7 +91,7 @@ template<typename VertexProperty>
 void PageRank<VertexProperty>::gen_updates()
 {
   // galois::ThreadSafeOrderedSet<GNode> &updated_vertices = this->vertex_properties.getUpdatedVertices();
-  std::vector<unsigned int> updated_vertices = this->vertex_properties.getUpdatedVertices();
+  std::vector<GNode> updated_vertices = this->vertex_properties.getUpdatedVertices();
   galois::do_all(
       galois::iterate(updated_vertices.begin(), updated_vertices.end()),
       [&](GNode lid)
@@ -143,8 +144,6 @@ void PageRank<VertexProperty>::update_frontier()
       galois::loopname("Update Frontier"),
       galois::no_stats(),
       galois::steal());
-  std::vector<GNode> frontier_iter = this->frontier.getOffsets();
-  spdlog::debug("[Proc {}] Frontier: {}", this->worker->node_id, fmt_array(frontier_iter));
 }
 
 template<typename VertexProperty>

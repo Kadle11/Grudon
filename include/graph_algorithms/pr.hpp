@@ -17,7 +17,8 @@ class PageRank : public GraphAlgorithm<VertexProperty>
       size_t num_compute,
       size_t num_memory,
       uint32_t node_id,
-      MPICore &net);
+      MPICore &net,
+      std::string partitioning_scheme_file = "");
 
   void init() override;
   void apply_updates() override;

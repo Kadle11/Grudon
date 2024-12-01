@@ -9,7 +9,8 @@ Worker<T>::Worker(
     size_t& num_memory,
     uint32_t& node_id,
     NODE_TYPE node_type,
-    MPICore& net)
+    MPICore& net,
+    std::string partitioning_scheme_file)
     : net(net),
       node_id(node_id),
       num_compute(num_compute),
@@ -30,7 +31,8 @@ Worker<T>::Worker(
       rTranslationTable,
       out_degrees,
       coverage_vector,
-      net);
+      net,
+      partitioning_scheme_file);
 
   // distributed_graph->printGraph();
 }
@@ -60,8 +62,9 @@ UpdateWorker<T>::UpdateWorker(
     size_t& num_memory,
     uint32_t& node_id,
     NODE_TYPE node_type,
-    MPICore& net)
-    : Worker<T>(graph_path, num_compute, num_memory, node_id, node_type, net)
+    MPICore& net,
+    std::string& partitioning_scheme_file)
+    : Worker<T>(graph_path, num_compute, num_memory, node_id, node_type, net, partitioning_scheme_file)
 {
 }
 
@@ -97,8 +100,9 @@ TraverseWorker<T>::TraverseWorker(
     size_t& num_memory,
     uint32_t& node_id,
     NODE_TYPE node_type,
-    MPICore& net)
-    : Worker<T>(graph_path, num_compute, num_memory, node_id, node_type, net)
+    MPICore& net,
+    std::string& partitioning_scheme_file)
+    : Worker<T>(graph_path, num_compute, num_memory, node_id, node_type, net, partitioning_scheme_file)
 {
 }
 
