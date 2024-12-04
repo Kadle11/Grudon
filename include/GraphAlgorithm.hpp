@@ -1,11 +1,11 @@
 #ifndef ALGORITHM_HPP
 #define ALGORITHM_HPP
 
+#include <galois/PriorityQueue.h>
+
 #include "DistributedGraph.hpp"
 #include "Graph.hpp"
 #include "Workers.hpp"
-
-#include <galois/PriorityQueue.h>
 
 #define MAX_ITERATIONS 1000
 
@@ -69,6 +69,10 @@ class GraphAlgorithm
   std::vector<galois::LargeArray<VertexProperty>> propertyBuffers;
   galois::DynamicBitSet updatedVertices;
   bool clear_updates;
+  std::vector<std::vector<galois::LargeArray<GNode>>> perThreadOffsetMatrix;
+  std::vector<std::vector<size_t>> perThreadVCounts;
+  size_t nGaloisThreads;
+  size_t verticesPerThread;
 
   // All Workers need access to the Graph Algorithm Interface
 
@@ -76,6 +80,8 @@ class GraphAlgorithm
   friend class TraverseWorker<VertexProperty>;
   friend class AggregateWorker<VertexProperty>;
   friend class Worker<VertexProperty>;
+
+  void generatePerThreadMatrix(const std::vector<GNode> &vertices);
 };
 
 // Explicit Instantiation
@@ -83,6 +89,5 @@ template class GraphAlgorithm<float>;
 template class GraphAlgorithm<double>;
 template class GraphAlgorithm<uint64_t>;
 template class GraphAlgorithm<uint32_t>;
-
 
 #endif  // ALGORITHM_HPP

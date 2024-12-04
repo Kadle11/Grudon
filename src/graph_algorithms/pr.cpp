@@ -38,6 +38,13 @@ void PageRank<VertexProperty>::init()
         this->vertex_updates[n] = 0.0;
         this->prev_updates[n] = 0.0;
       }
+      else
+      {
+        this->vertex_properties[n] = 0.0;
+        this->pr_vals[n] = 0.0;
+        this->vertex_updates[n] = 0.0;
+        this->prev_updates[n] = 0.0;
+      }
     }
   }
   else if (this->node_type == MEMORY_NODE)
@@ -65,10 +72,11 @@ void PageRank<VertexProperty>::apply_updates()
       galois::iterate(frontier_iter),
       [&](GNode lid)
       {
-        if (this->vertex_updates[lid] > TOLERANCE)
+        VertexProperty update_val = this->vertex_updates[lid];
+        if (update_val > TOLERANCE)
         {
-          this->pr_vals.addUpdate(lid, this->vertex_updates[lid]);
-          this->vertex_properties[lid] = DAMPING_FACTOR * this->vertex_updates[lid] / this->worker->out_degrees[lid];
+          this->pr_vals.addUpdate(lid, update_val);
+          this->vertex_properties[lid] = DAMPING_FACTOR * update_val / this->worker->out_degrees[lid];
           this->vertex_updates[lid] = 0.0;
           this->prev_updates[lid] = 0.0;
         }
@@ -89,6 +97,8 @@ void PageRank<VertexProperty>::gen_updates()
       {
         auto ii = this->worker->distributed_graph->lgraph.edge_begin(lid);
         auto ei = this->worker->distributed_graph->lgraph.edge_end(lid);
+        VertexProperty pr_val = this->vertex_properties[lid];
+        
         for (; ii != ei; ++ii)
         {
           GNode dst = this->worker->distributed_graph->lgraph.getEdgeDst(ii);
@@ -101,7 +111,7 @@ void PageRank<VertexProperty>::gen_updates()
           //     this->vertex_properties[lid],
           //     this->vertex_updates[dst]);
 
-          this->vertex_updates.addUpdate(dst, this->vertex_properties[lid]);
+          this->vertex_updates.addUpdate(dst, pr_val);
         }
       },
       galois::loopname("Generate Updates"),
@@ -112,21 +122,22 @@ void PageRank<VertexProperty>::gen_updates()
 template<typename VertexProperty>
 void PageRank<VertexProperty>::update_frontier()
 {
-  galois::substrate::SimpleLock lock;
+  // galois::substrate::SimpleLock lock;
   // galois::ThreadSafeOrderedSet<GNode> &updated_vertices = this->vertex_updates.getUpdatedVertices();
   std::vector<GNode> updated_vertices = this->vertex_updates.getUpdatedVertices();
   galois::do_all(
       galois::iterate(updated_vertices.begin(), updated_vertices.end()),
       [&](GNode lid)
       {
-        if (this->vertex_updates[lid] > TOLERANCE && this->prev_updates[lid] < TOLERANCE)
+        VertexProperty update_val = this->vertex_updates[lid];
+        if (update_val > TOLERANCE && this->prev_updates[lid] < TOLERANCE)
         {
           // lock.lock();
           // this->frontier.push_back(lid);
           this->frontier.set(lid);
           // lock.unlock();
 
-          this->prev_updates[lid] = this->vertex_updates[lid];
+          this->prev_updates[lid] = update_val;
         }
       },
       galois::loopname("Update Frontier"),
