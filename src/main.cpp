@@ -22,12 +22,14 @@ int main(int argc, char **argv)
   options.add_options()("g, graph-path", "Input graph file", cxxopts::value<std::string>())(
       "c, num-compute", "Number of compute nodes", cxxopts::value<size_t>())(
       "m, num-memory", "Number of memory nodes", cxxopts::value<size_t>())(
-      "t, threads", "Number of threads", cxxopts::value<size_t>()->default_value("1"))("h, help", "Print usage");
+      "t, threads", "Number of threads", cxxopts::value<size_t>()->default_value("1"))(
+      "p, partitioning-scheme", "Partitioning scheme file", cxxopts::value<std::string>())("h, help", "Print usage");
 
   std::string graph_path = "";
   size_t num_compute = 0;
   size_t num_memory = 0;
   size_t num_threads = 1;
+  std::string partitioning_scheme_file = "";
 
   try
   {
@@ -72,6 +74,11 @@ int main(int argc, char **argv)
     if (result.count("threads"))
     {
       num_threads = result["threads"].as<size_t>();
+    }
+
+    if (result.count("partitioning-scheme"))
+    {
+      partitioning_scheme_file = result["partitioning-scheme"].as<std::string>();
     }
   }
   catch (const std::exception &e)
@@ -123,7 +130,8 @@ int main(int argc, char **argv)
 
   // distributed_graph.printState();
 
-  GraphAlgorithm<float_t> *graph_algorithm = new PageRank<float_t>(node_type, "PageRank", graph_path, num_compute, num_memory, node_id, net);
+  GraphAlgorithm<float> *graph_algorithm =
+      new PageRank<float>(node_type, "", graph_path, num_compute, num_memory, node_id, net, partitioning_scheme_file);
 
   graph_algorithm->init();
   graph_algorithm->run();
@@ -131,7 +139,7 @@ int main(int argc, char **argv)
 
   if (num_compute == 1)
   {
-    graph_algorithm->verify();
+    // graph_algorithm->verify();
   }
 
   delete graph_algorithm;

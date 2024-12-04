@@ -11,7 +11,7 @@ template<typename VertexProperty>
 void GraphAlgorithm<VertexProperty>::generatePerThreadMatrix(const std::vector<GNode> &vertices)
 {
   size_t curr_vertices = vertices.size();
-  verticesPerThread = (curr_vertices > nGaloisThreads) ? curr_vertices / nGaloisThreads : 1;
+  verticesPerThread = 1 + ((curr_vertices > nGaloisThreads) ? curr_vertices / nGaloisThreads : 0);
 
   if (node_type == COMPUTE_NODE)
   {
@@ -73,7 +73,8 @@ GraphAlgorithm<VertexProperty>::GraphAlgorithm(
     size_t num_compute,
     size_t num_memory,
     uint32_t node_id,
-    MPICore &net)
+    MPICore &net,
+    std::string& partitioning_scheme_file)
     : algorithm_name(algorithm_name),
       node_type(node_type),
       net(net),
@@ -86,7 +87,7 @@ GraphAlgorithm<VertexProperty>::GraphAlgorithm(
   if (node_type == COMPUTE_NODE)
   {
     nGaloisThreads /= 4;
-    worker = new UpdateWorker<VertexProperty>(graph_path, num_compute, num_memory, node_id, node_type, net);
+    worker = new UpdateWorker<VertexProperty>(graph_path, num_compute, num_memory, node_id, node_type, net, partitioning_scheme_file);
     verticesPerThread = worker->num_vertices / nGaloisThreads > 0 ? worker->num_vertices / nGaloisThreads : 1;
 
     propertyBuffers.resize(num_memory);
@@ -108,7 +109,7 @@ GraphAlgorithm<VertexProperty>::GraphAlgorithm(
   }
   else if (node_type == MEMORY_NODE)
   {
-    worker = new TraverseWorker<VertexProperty>(graph_path, num_compute, num_memory, node_id, node_type, net);
+    worker = new TraverseWorker<VertexProperty>(graph_path, num_compute, num_memory, node_id, node_type, net, partitioning_scheme_file);
     verticesPerThread = worker->num_vertices / nGaloisThreads > 0 ? worker->num_vertices / nGaloisThreads : 1;
 
     propertyBuffers.resize(num_compute);
@@ -246,7 +247,7 @@ void GraphAlgorithm<VertexProperty>::run()
 
       for (int worker_id = 0; worker_id < num_memory; worker_id++)
       {
-        // spdlog::info("[Proc {}/{}] Property Buffers: {}", this->worker->node_id, i, fmt_array(propertyBuffers[i]));
+        // spdlog::info("[Proc {}/{}] Property Buffers: {}", this->worker->node_id, worker_id, fmt_array(propertyBuffers[worker_id]));
         net.Isend(
             worker_id + num_compute,
             0,
@@ -314,7 +315,9 @@ void GraphAlgorithm<VertexProperty>::run()
 
         const std::vector<GNode> &updated_property_vertices = worker->bitCommVector[i].getOffsets();
         const size_t &nVertices = updated_property_vertices.size();
-        const size_t &uVerticesPerThread = (nVertices > nGaloisThreads) ? nVertices / nGaloisThreads : 1;
+        const size_t &uVerticesPerThread = 1 + ((nVertices > nGaloisThreads) ? nVertices / nGaloisThreads : 0);
+
+        // spdlog::info("[Proc {}] Updated Property Vertices: {}", worker->node_id, fmt_array(updated_property_vertices));
 
         galois::do_all(
             galois::iterate(0ul, nGaloisThreads),
@@ -346,6 +349,7 @@ void GraphAlgorithm<VertexProperty>::run()
     {
       if (ndp_decision == NDP_OFFLOAD)
       {
+
         worker->traverse(*this);
 
         // const galois::ThreadSafeOrderedSet<GNode> &updated_vertices = vertex_updates.getUpdatedVertices();
@@ -554,7 +558,7 @@ void GraphAlgorithm<VertexProperty>::run()
 
             const std::vector<GNode> updated_property_vertices = worker->bitCommVector[i].getOffsets();
             const size_t &nVertices = updated_property_vertices.size();
-            const size_t &uVerticesPerThread = (nVertices > nGaloisThreads) ? nVertices / nGaloisThreads : 1;
+            const size_t &uVerticesPerThread = 1 + ((nVertices > nGaloisThreads) ? nVertices / nGaloisThreads : 0);
 
             // spdlog::info("[Proc {}] Updated Vertices: {}", this->worker->node_id, fmt_array(updated_property_vertices));
 

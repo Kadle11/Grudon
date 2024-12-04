@@ -24,7 +24,8 @@ DistributedGraph::DistributedGraph(
     std::vector<std::unordered_map<GNode, GNode>>& rTranslationTable,
     galois::LargeArray<uint64_t>& out_degrees,
     galois::LargeArray<bool>& coverage_vector,
-    MPICore& net)
+    MPICore& net,
+    std::string& partitioning_scheme_file)
     : num_compute(num_compute),
       num_memory(num_memory),
       node_id(node_id),
@@ -62,7 +63,8 @@ DistributedGraph::DistributedGraph(
         master_partition,
         master_partition_sizes,
         mirror_partition_sizes,
-        mirror_edge_counts);
+        mirror_edge_counts,
+        partitioning_scheme_file);
 
     spdlog::info("Partitioned the across {} masters and {} mirrors", num_compute, num_memory);
   }
@@ -311,6 +313,9 @@ DistributedGraph::DistributedGraph(
       cross_node_mirrors[i].resize(total_vertices);
     }
 
+    galois::GAccumulator<uint64_t> total_cross_node_mirrors;
+    total_cross_node_mirrors.reset();
+
     galois::do_all(
         galois::iterate(bgraph),
         [&](GNode n)
@@ -340,6 +345,7 @@ DistributedGraph::DistributedGraph(
               if (mirror_partition[dst] != curMirror)
               {
                 cross_node_mirrors[curMirror].set(dst);
+                total_cross_node_mirrors += 1;
               }
             }
           }
@@ -361,6 +367,7 @@ DistributedGraph::DistributedGraph(
               if (mirror_partition[dst] != curMirror)
               {
                 cross_node_mirrors[curMirror].set(dst);
+                total_cross_node_mirrors += 1;
               }
             }
           }
@@ -438,6 +445,11 @@ DistributedGraph::DistributedGraph(
 
     new_master_partition.deallocate();
     new_mirror_partition.deallocate();
+
+    galois::runtime::reportStat_Single(
+        "Partitioning Scheme",
+        "Replication Factor",
+        float(total_cross_node_mirrors.reduce() + bgraph.size()) / bgraph.size());
   }
   else
   {
