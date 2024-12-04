@@ -73,7 +73,7 @@ for i in {2..8}
 do
     echo "Running Galois with $i partitions"
     LOG_FILE=$LOG_DIR/Gluon-$GRAPH_NAME-$ALGORITHM-1C"$i"M5T.log
-    OUTPUT=$(GALOIS_DO_NOT_BIND_THREADS=1 time mpirun -n $i --npersocket 1 --map-by NUMA:PE=5 --use-hwthread-cpus --report-bindings $GALOIS_BIN -exec=Sync -runs=1 $GRAPH_PATH -t=5 2>&1 | tee $LOG_FILE)
+    OUTPUT=$(GALOIS_DO_NOT_BIND_THREADS=1 time mpirun -n $i --npersocket 1 --map-by NUMA:PE=10 --use-hwthread-cpus --report-bindings $GALOIS_BIN -exec=Sync -runs=1 $GRAPH_PATH -t=20 2>&1 | tee $LOG_FILE)
 done
 
 # Run Groudon
@@ -83,7 +83,7 @@ do
     LOG_FILE=$LOG_DIR/Groudon-$GRAPH_NAME-$ALGORITHM-1C"$i"M5T.log
     PARTITIONS_FILE=$PARTITIONS_DIR/$GRAPH_NAME."$i"parts
     TOTAL_PARTS=$((i + 1))
-    OUTPUT=$(GALOIS_DO_NOT_BIND_THREADS=1 time mpirun -n $TOTAL_PARTS --npersocket 1 --map-by NUMA:PE=5 --use-hwthread-cpus --report-bindings $GROUDON_BIN -g $GRAPH_PATH -c 1 -m $i -t 5 -p $PARTITIONS_FILE 2>&1 | tee $LOG_FILE)
+    OUTPUT=$(GALOIS_DO_NOT_BIND_THREADS=1 time mpirun -n $TOTAL_PARTS --npersocket 1 --map-by NUMA:PE=7 --use-hwthread-cpus --report-bindings $GROUDON_BIN -g $GRAPH_PATH -c 1 -m $i -t 20 -p $PARTITIONS_FILE 2>&1 | tee $LOG_FILE)
 done
 
 # Run ~GraphQ
@@ -91,5 +91,5 @@ for i in {2..8}
 do
     echo "Running Galois with $i partitions"
     LOG_FILE=$LOG_DIR/GraphQ-$GRAPH_NAME-$ALGORITHM-1C"$i"M5T.log
-    OUTPUT=$(GALOIS_DO_NOT_BIND_THREADS=1 time mpirun -n $i --npersocket 1 --map-by NUMA:PE=5 --use-hwthread-cpus --report-bindings $GALOIS_BIN $GRAPH_PATH -partitionAgnostic -metadata=none -exec=Sync -runs=1 -t=5 2>&1 | tee $LOG_FILE)
+    OUTPUT=$(GALOIS_DO_NOT_BIND_THREADS=1 time mpirun -n $i --npersocket 1 --map-by NUMA:PE=10 --use-hwthread-cpus --report-bindings $GALOIS_BIN $GRAPH_PATH -partitionAgnostic -metadata=none -exec=Sync -runs=1 -t=20 2>&1 | tee $LOG_FILE)
 done

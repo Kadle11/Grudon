@@ -130,8 +130,8 @@ int main(int argc, char **argv)
 
   // distributed_graph.printState();
 
-  GraphAlgorithm<uint32_t> *graph_algorithm =
-      new SSSP<uint32_t>(node_type, "", graph_path, num_compute, num_memory, node_id, net, partitioning_scheme_file);
+  GraphAlgorithm<float> *graph_algorithm =
+      new PageRank<float>(node_type, "", graph_path, num_compute, num_memory, node_id, net, partitioning_scheme_file);
 
   graph_algorithm->init();
   graph_algorithm->run();
@@ -139,7 +139,7 @@ int main(int argc, char **argv)
 
   if (num_compute == 1)
   {
-    graph_algorithm->verify();
+    // graph_algorithm->verify();
   }
 
   delete graph_algorithm;
