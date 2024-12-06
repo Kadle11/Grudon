@@ -95,7 +95,7 @@ void GraphAlgorithm<VertexProperty>::run()
     switch_offload = INC_OFFLOAD;
 
     net.allReduce(&memory_offload, &ndp_decision, 1, MPI_UINT32_T, MPI_MIN);
-    net.allReduce(&switch_offload, &inc_decision, 1, MPI_UINT32_T, MPI_MIN);
+    // net.allReduce(&switch_offload, &inc_decision, 1, MPI_UINT32_T, MPI_MIN);
 
     // Send the Frontier to all Traversers
     if (node_type == COMPUTE_NODE)
@@ -199,12 +199,14 @@ void GraphAlgorithm<VertexProperty>::run()
 
         if (switch_offload == INC_OFFLOAD)
         {
+          std::vector<std::map<GNode, VertexProperty>> propertyMap(num_compute);
           for (const GNode &lid : updated_vertices)
           {
             GNode gid = worker->distributed_graph->getGlobalNode(lid);
             uint32_t worker_id = worker->getVertexComputePartition(gid);
             worker->bitCommVector_Send[worker_id].set(worker->sAggrTranslationTable[worker_id][lid]);
-            propertyBuffers[worker_id][idxTracker[worker_id]] = vertex_updates[lid];
+            propertyMap[worker_id][worker->sAggrTranslationTable[worker_id][lid]] = vertex_updates[lid];
+            // propertyBuffers[worker_id][idxTracker[worker_id]] = vertex_updates[lid];
 
             spdlog::debug(
                 "[Proc {}/{}] Sending GVertex/Update: {}/{} to Compute Node: {}",
@@ -214,7 +216,15 @@ void GraphAlgorithm<VertexProperty>::run()
                 propertyBuffers[worker_id][idxTracker[worker_id]],
                 worker_id);
 
-            idxTracker[worker_id]++;
+            // idxTracker[worker_id]++;
+          }
+          for (uint32_t worker_id = 0; worker_id < num_compute; worker_id++)
+          {
+            for (auto elem : propertyMap[worker_id])
+            {
+              propertyBuffers[worker_id][idxTracker[worker_id]] = elem.second;
+              idxTracker[worker_id]++;
+            }
           }
         }
         else
@@ -316,7 +326,6 @@ void GraphAlgorithm<VertexProperty>::run()
                     vertex_updates[j],
                     recv_data[i].second[idxTracker[i]],
                     i);
-
                 GNode lid = j;
                 worker->aggregate(*this, lid, recv_data[i].second[idxTracker[i]]);
                 idxTracker[i]++;

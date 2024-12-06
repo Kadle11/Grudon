@@ -624,19 +624,22 @@ DistributedGraph::DistributedGraph(
       //     masterID);
 
       addrTranslationTableIdxs[masterID]++;
-    }\
+    }
     for (int64_t gnode = 0; gnode < master_partition.size(); gnode++)
     {
-      GNode lnode = gid_to_lid[gnode];
       uint64_t masterID = master_partition[gnode];
-      sAggrTranslationTable[masterID][lnode] = aggrAddrTranslationTableIdxs[masterID];
+      if (gid_to_lid.find(gnode) != gid_to_lid.end())
+      {
+        GNode lnode = gid_to_lid[gnode];
+        sAggrTranslationTable[masterID][lnode] = aggrAddrTranslationTableIdxs[masterID];
+      }
       aggrAddrTranslationTableIdxs[masterID]++;
     }
     for (int i = 0; i < num_compute; i++)
     {
       assert(addrTranslationTableIdxs[i] == translationTableSizes[i]);
     }
-
+    aggrAddrTranslationTableIdxs.clear();
     addrTranslationTableIdxs.clear();
     vbuffer.clear();
   }

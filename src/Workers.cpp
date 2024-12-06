@@ -167,7 +167,7 @@ AggregateWorker<T>::AggregateWorker(
   this->rTranslationTable = this->distributed_graph->rTranslationTable;
   this->sAggrTranslationTable = this->distributed_graph->sAggrTranslationTable;
   this->bitCommVector_Recv.resize(this->num_memory);
-  for (int i = 0; i < this->num_memory; i++)
+  for (size_t i = 0; i < this->num_memory; i++)
   {
     this->bitCommVector_Recv[i].resize(this->num_vertices);
   }
@@ -208,8 +208,7 @@ std::vector<std::pair<galois::DynamicBitSet, galois::LargeArray<T>>> AggregateWo
   aggregatePropertyBuffer.allocateLocal(this->num_vertices);
   auto MPI_VERTEX_PROPERTY_T = mpi_get_type<T>();
 
-  std::unordered_map<GNode, T> aggregatePropertyMap;
-  uint32_t idx = 0;
+  std::map<GNode, T> aggregatePropertyMap;
   for (int i = 0; i < this->num_memory; i++)
   {
     propertyBuffers[i].allocateLocal(this->sTranslationTable[i].size());
@@ -236,19 +235,23 @@ std::vector<std::pair<galois::DynamicBitSet, galois::LargeArray<T>>> AggregateWo
         if (!aggregateBitCommVector.test(j))
         {
           aggregateBitCommVector.set(j);
-          aggregatePropertyMap[idx++] = propertyBuffers[i][local_idx++];
+          aggregatePropertyMap[j] = propertyBuffers[i][local_idx];
         }
         else
         {
-          aggregatePropertyMap[idx++] += propertyBuffers[i][local_idx++];
+          aggregatePropertyMap[j] += propertyBuffers[i][local_idx];
+          // aggregatePropertyMap.find(j)->second += propertyBuffers[i][local_idx];
         }
+        local_idx++;
       }
     }
     this->bitCommVector_Recv[i].reset();
   }
-  for (auto elem : aggregatePropertyMap)
+  uint32_t idx = 0;
+  for (const auto& elem : aggregatePropertyMap)
   {
-    aggregatePropertyBuffer[elem.first] = elem.second;
+    aggregatePropertyBuffer[idx] = elem.second;
+    idx++;
   }
   result.emplace_back(std::move(aggregateBitCommVector), std::move(aggregatePropertyBuffer));
   return result;
