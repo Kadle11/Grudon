@@ -74,7 +74,7 @@ GraphAlgorithm<VertexProperty>::GraphAlgorithm(
     size_t num_memory,
     uint32_t node_id,
     MPICore &net,
-    std::string& partitioning_scheme_file)
+    std::string &partitioning_scheme_file)
     : algorithm_name(algorithm_name),
       node_type(node_type),
       net(net),
@@ -86,8 +86,10 @@ GraphAlgorithm<VertexProperty>::GraphAlgorithm(
 
   if (node_type == COMPUTE_NODE)
   {
-    nGaloisThreads /= 4;
-    worker = new UpdateWorker<VertexProperty>(graph_path, num_compute, num_memory, node_id, node_type, net, partitioning_scheme_file);
+    // nGaloisThreads/=2;
+
+    worker = new UpdateWorker<VertexProperty>(
+        graph_path, num_compute, num_memory, node_id, node_type, net, partitioning_scheme_file);
     verticesPerThread = worker->num_vertices / nGaloisThreads > 0 ? worker->num_vertices / nGaloisThreads : 1;
 
     propertyBuffers.resize(num_memory);
@@ -109,7 +111,8 @@ GraphAlgorithm<VertexProperty>::GraphAlgorithm(
   }
   else if (node_type == MEMORY_NODE)
   {
-    worker = new TraverseWorker<VertexProperty>(graph_path, num_compute, num_memory, node_id, node_type, net, partitioning_scheme_file);
+    worker = new TraverseWorker<VertexProperty>(
+        graph_path, num_compute, num_memory, node_id, node_type, net, partitioning_scheme_file);
     verticesPerThread = worker->num_vertices / nGaloisThreads > 0 ? worker->num_vertices / nGaloisThreads : 1;
 
     propertyBuffers.resize(num_compute);
@@ -140,6 +143,8 @@ GraphAlgorithm<VertexProperty>::GraphAlgorithm(
   vertex_properties.allocate(worker->num_vertices);
   vertex_updates.allocate(worker->num_vertices);
   MPI_VERTEX_PROPERTY_T = mpi_get_type<VertexProperty>();
+
+  spdlog::info("[Proc {}] Number of Galois Threads: {}", node_id, nGaloisThreads);
 }
 
 template<typename VertexProperty>
@@ -174,6 +179,9 @@ void GraphAlgorithm<VertexProperty>::run()
 
   net.barrier();
 
+  galois::StatTimer timer;
+  timer.start();
+
   while (worker_completion_count != num_compute && iteration < MAX_ITERATIONS)
   {
     memory_offload = NO_OFFLOAD;
@@ -187,7 +195,7 @@ void GraphAlgorithm<VertexProperty>::run()
     if (node_type == COMPUTE_NODE)
     {
       memory_offload = NDP_OFFLOAD;
-      //     NDPEngine(frontier, worker->coverage_vector, ndp_offload_threshold, *worker->distributed_graph, num_compute);
+      // NDPEngine(frontier, worker->coverage_vector, ndp_offload_threshold, *worker->distributed_graph, num_compute);
 
       // switch_offload = INCEngine(frontier, worker->out_degrees, *worker->distributed_graph, inc_offload_threshold);
     }
@@ -247,7 +255,8 @@ void GraphAlgorithm<VertexProperty>::run()
 
       for (int worker_id = 0; worker_id < num_memory; worker_id++)
       {
-        // spdlog::info("[Proc {}/{}] Property Buffers: {}", this->worker->node_id, worker_id, fmt_array(propertyBuffers[worker_id]));
+        // spdlog::info("[Proc {}/{}] Property Buffers: {}", this->worker->node_id, worker_id,
+        // fmt_array(propertyBuffers[worker_id]));
         net.Isend(
             worker_id + num_compute,
             0,
@@ -349,7 +358,6 @@ void GraphAlgorithm<VertexProperty>::run()
     {
       if (ndp_decision == NDP_OFFLOAD)
       {
-
         worker->traverse(*this);
 
         // const galois::ThreadSafeOrderedSet<GNode> &updated_vertices = vertex_updates.getUpdatedVertices();
@@ -689,6 +697,8 @@ void GraphAlgorithm<VertexProperty>::run()
     // net.barrier();
   }
 
+  timer.stop();
+
   uint64_t total_bytes = 0;
   uint64_t bytes = net.getBytesMoved();
   net.allReduce(&bytes, &total_bytes, 1, MPI_UINT64_T, MPI_SUM);
@@ -697,5 +707,6 @@ void GraphAlgorithm<VertexProperty>::run()
   {
     galois::runtime::reportStat_Single(algorithm_name, "Iterations", iteration);
     galois::runtime::reportStat_Single(algorithm_name, "TotalBytesMoved", total_bytes);
+    galois::runtime::reportStat_Single(algorithm_name, "Timer_0", timer.get());
   }
 }

@@ -23,13 +23,15 @@ int main(int argc, char **argv)
       "c, num-compute", "Number of compute nodes", cxxopts::value<size_t>())(
       "m, num-memory", "Number of memory nodes", cxxopts::value<size_t>())(
       "t, threads", "Number of threads", cxxopts::value<size_t>()->default_value("1"))(
-      "p, partitioning-scheme", "Partitioning scheme file", cxxopts::value<std::string>())("h, help", "Print usage");
+      "p, partitioning-scheme", "Partitioning scheme file", cxxopts::value<std::string>())(
+      "a, algorithm", "Graph Algorithm", cxxopts::value<std::string>()->default_value("pr"))("h, help", "Print usage");
 
   std::string graph_path = "";
   size_t num_compute = 0;
   size_t num_memory = 0;
   size_t num_threads = 1;
   std::string partitioning_scheme_file = "";
+  std::string algorithm = "";
 
   try
   {
@@ -79,6 +81,16 @@ int main(int argc, char **argv)
     if (result.count("partitioning-scheme"))
     {
       partitioning_scheme_file = result["partitioning-scheme"].as<std::string>();
+    }
+
+    if (result.count("algorithm"))
+    {
+      algorithm = result["algorithm"].as<std::string>();
+      if (algorithm != "pr" && algorithm != "cc" && algorithm != "sssp")
+      {
+        std::cerr << "Invalid algorithm. Please choose from pr, cc, sssp" << std::endl;
+        return 1;
+      }
     }
   }
   catch (const std::exception &e)
@@ -130,19 +142,36 @@ int main(int argc, char **argv)
 
   // distributed_graph.printState();
 
-  GraphAlgorithm<float> *graph_algorithm =
-      new PageRank<float>(node_type, "", graph_path, num_compute, num_memory, node_id, net, partitioning_scheme_file);
-
-  graph_algorithm->init();
-  graph_algorithm->run();
-  // graph_algorithm->printState();
-
-  if (num_compute == 1)
+  if (algorithm == "pr")
   {
-    // graph_algorithm->verify();
-  }
+    GraphAlgorithm<float> *graph_algorithm = new PageRank<float>(
+        node_type, "PageRank", graph_path, num_compute, num_memory, node_id, net, partitioning_scheme_file);
 
-  delete graph_algorithm;
+    graph_algorithm->init();
+    graph_algorithm->run();
+
+    delete graph_algorithm;
+  }
+  else if (algorithm == "cc")
+  {
+    GraphAlgorithm<uint32_t> *graph_algorithm = new CC<uint32_t>(
+        node_type, "ConnectedComponents", graph_path, num_compute, num_memory, node_id, net, partitioning_scheme_file);
+
+    graph_algorithm->init();
+    graph_algorithm->run();
+
+    delete graph_algorithm;
+  }
+  else if (algorithm == "sssp")
+  {
+    GraphAlgorithm<uint32_t> *graph_algorithm = new SSSP<uint32_t>(
+        node_type, "SingleSourceShortestPath", graph_path, num_compute, num_memory, node_id, net, partitioning_scheme_file);
+
+    graph_algorithm->init();    
+    graph_algorithm->run();
+
+    delete graph_algorithm;
+  }
 
   return 0;
 }
