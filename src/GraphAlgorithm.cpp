@@ -88,7 +88,7 @@ void GraphAlgorithm<VertexProperty>::run()
     if (node_type == COMPUTE_NODE)
     {
       memory_offload =
-          NDPEngine(frontier, worker->coverage_vector, ndp_offload_threshold, *worker->distributed_graph, num_memory;
+          NDPEngine(frontier, worker->coverage_vector, ndp_offload_threshold, *worker->distributed_graph, num_memory);
 
       // switch_offload = INCEngine(frontier, worker->out_degrees, *worker->distributed_graph, inc_offload_threshold);
     }
