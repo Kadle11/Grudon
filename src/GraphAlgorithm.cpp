@@ -28,10 +28,12 @@ void GraphAlgorithm<VertexProperty>::generatePerThreadMatrix(const std::vector<G
           const size_t &end = (j + 1) * verticesPerThread > curr_vertices ? curr_vertices : (j + 1) * verticesPerThread;
           size_t pID;  // Partition ID
 
+          auto &offsetMatrix = perThreadOffsetMatrix[j];
+
           for (size_t i = start; i < end; i++)
           {
             pID = worker->getVertexMemoryPartition(vertices[i]);
-            perThreadOffsetMatrix[pID][j][perThreadVCounts[pID][j]++] = vertices[i];
+            offsetMatrix[pID][perThreadVCounts[pID][j]++] = vertices[i];
           }
         },
         galois::loopname("Generate Per Thread Matrix"),
@@ -53,10 +55,12 @@ void GraphAlgorithm<VertexProperty>::generatePerThreadMatrix(const std::vector<G
           const size_t &end = (j + 1) * verticesPerThread > curr_vertices ? curr_vertices : (j + 1) * verticesPerThread;
           size_t pID;  // Partition ID
 
+          auto &offsetMatrix = perThreadOffsetMatrix[j];
+
           for (size_t i = start; i < end; i++)
           {
             pID = worker->getVertexComputePartition(vertices[i]);
-            perThreadOffsetMatrix[pID][j][perThreadVCounts[pID][j]++] = vertices[i];
+            offsetMatrix[pID][perThreadVCounts[pID][j]++] = vertices[i];
           }
         },
         galois::loopname("Generate Per Thread Matrix"),
@@ -86,27 +90,31 @@ GraphAlgorithm<VertexProperty>::GraphAlgorithm(
 
   if (node_type == COMPUTE_NODE)
   {
-    // nGaloisThreads/=2;
+    nGaloisThreads /= 2;
+    galois::setActiveThreads(nGaloisThreads);
 
     worker = new UpdateWorker<VertexProperty>(
         graph_path, num_compute, num_memory, node_id, node_type, net, partitioning_scheme_file);
     verticesPerThread = worker->num_vertices / nGaloisThreads > 0 ? worker->num_vertices / nGaloisThreads : 1;
 
     propertyBuffers.resize(num_memory);
-    perThreadOffsetMatrix.resize(num_memory);
+    perThreadOffsetMatrix.resize(nGaloisThreads);
     perThreadVCounts.resize(num_memory);
 
     for (int i = 0; i < num_memory; i++)
     {
       propertyBuffers[i].allocateLocal(worker->sTranslationTable[i].size());
-      perThreadOffsetMatrix[i] = std::vector<galois::LargeArray<GNode>>(nGaloisThreads);
+      perThreadVCounts[i].resize(nGaloisThreads, 0);
+    }
 
-      for (size_t j = 0; j < nGaloisThreads; j++)
+    for (size_t i = 0; i < nGaloisThreads; i++)
+    {
+      perThreadOffsetMatrix[i] = std::vector<galois::LargeArray<GNode>>(num_memory);
+
+      for (int j = 0; j < num_memory; j++)
       {
         perThreadOffsetMatrix[i][j].allocateLocal(verticesPerThread);
       }
-
-      perThreadVCounts[i].resize(nGaloisThreads, 0);
     }
   }
   else if (node_type == MEMORY_NODE)
@@ -116,20 +124,23 @@ GraphAlgorithm<VertexProperty>::GraphAlgorithm(
     verticesPerThread = worker->num_vertices / nGaloisThreads > 0 ? worker->num_vertices / nGaloisThreads : 1;
 
     propertyBuffers.resize(num_compute);
-    perThreadOffsetMatrix.resize(num_compute);
+    perThreadOffsetMatrix.resize(nGaloisThreads);
     perThreadVCounts.resize(num_compute);
 
     for (int i = 0; i < num_compute; i++)
     {
       propertyBuffers[i].allocateLocal(worker->sTranslationTable[i].size());
-      perThreadOffsetMatrix[i] = std::vector<galois::LargeArray<GNode>>(nGaloisThreads);
+      perThreadVCounts[i].resize(nGaloisThreads, 0);
+    }
 
-      for (size_t j = 0; j < nGaloisThreads; j++)
+    for (size_t i = 0; i < nGaloisThreads; i++)
+    {
+      perThreadOffsetMatrix[i] = std::vector<galois::LargeArray<GNode>>(num_compute);
+
+      for (int j = 0; j < num_compute; j++)
       {
         perThreadOffsetMatrix[i][j].allocateLocal(verticesPerThread);
       }
-
-      perThreadVCounts[i].resize(nGaloisThreads, 0);
     }
   }
 
@@ -180,6 +191,11 @@ void GraphAlgorithm<VertexProperty>::run()
   net.barrier();
 
   galois::StatTimer timer;
+  galois::StatTimer traversal_timer;
+  galois::StatTimer update_timer;
+  galois::StatTimer cPhase1_timer;
+  galois::StatTimer cPhase2_timer;
+
   timer.start();
 
   while (worker_completion_count != num_compute && iteration < MAX_ITERATIONS)
@@ -206,6 +222,7 @@ void GraphAlgorithm<VertexProperty>::run()
     // Send the Frontier to all Traversers
     if (node_type == COMPUTE_NODE)
     {
+      cPhase1_timer.start();
       const std::vector<GNode> &current_frontier = this->frontier.getOffsets();
 
       // for (const GNode lid : frontier.getOffsets())
@@ -227,20 +244,28 @@ void GraphAlgorithm<VertexProperty>::run()
 
       generatePerThreadMatrix(current_frontier);
 
-      galois::do_all(
-          galois::iterate(0ul, nGaloisThreads),
-          [&](const size_t tid)
-          {
-            for (int worker_id = 0; worker_id < num_memory; worker_id++)
+      for (int worker_id = 0; worker_id < num_memory; worker_id++)
+      {
+        // spdlog::info("[Proc {}/{}] Property Buffers: {}", this->worker->node_id, worker_id,
+        // fmt_array(propertyBuffers[worker_id]));
+
+        galois::do_all(
+            galois::iterate(0ul, nGaloisThreads),
+            [&](const size_t tid)
             {
               size_t offset = std::accumulate(
                   perThreadVCounts[worker_id].begin(), std::next(perThreadVCounts[worker_id].begin(), tid), 0);
 
-              for (uint64_t j = 0; j < perThreadVCounts[worker_id][tid]; j++)
+              size_t &nVertices = perThreadVCounts[worker_id][tid];
+              auto &offsetMatrix = perThreadOffsetMatrix[tid][worker_id];
+              auto &transTable = worker->sTranslationTable[worker_id];
+              auto &pBuffer = propertyBuffers[worker_id];
+
+              for (uint64_t j = 0; j < nVertices; j++)
               {
-                GNode lid = perThreadOffsetMatrix[worker_id][tid][j];
-                worker->bitCommVector[worker_id].set(worker->sTranslationTable[worker_id][lid]);
-                propertyBuffers[worker_id][offset + j] = vertex_properties[lid];
+                GNode lid = offsetMatrix[j];
+                worker->bitCommVector[worker_id].set(transTable[lid]);
+                pBuffer[offset + j] = vertex_properties[lid];
 
                 // spdlog::debug(
                 //     "[Proc {}/{}] Sending propertyBuffers: {}/{} to Memory Node: {}",
@@ -250,13 +275,11 @@ void GraphAlgorithm<VertexProperty>::run()
                 //     vertex_properties[lid],
                 //     worker_id);
               }
-            }
-          });
+            },
+            galois::loopname("Generate Property Buffers"),
+            galois::no_stats(),
+            galois::steal());
 
-      for (int worker_id = 0; worker_id < num_memory; worker_id++)
-      {
-        // spdlog::info("[Proc {}/{}] Property Buffers: {}", this->worker->node_id, worker_id,
-        // fmt_array(propertyBuffers[worker_id]));
         net.Isend(
             worker_id + num_compute,
             0,
@@ -280,9 +303,12 @@ void GraphAlgorithm<VertexProperty>::run()
         MPI_Wait(&data_requests[i], &statuses[i]);
         worker->bitCommVector[i].reset();
       }
+
+      cPhase1_timer.stop();
     }
     else if (node_type == MEMORY_NODE)
     {
+      cPhase1_timer.start();
       for (int i = 0; i < num_compute; i++)
       {
         net.Irecv(
@@ -335,12 +361,18 @@ void GraphAlgorithm<VertexProperty>::run()
               const size_t &start = tid * uVerticesPerThread;
               const size_t &end = (tid + 1) * uVerticesPerThread > nVertices ? nVertices : (tid + 1) * uVerticesPerThread;
 
+              auto &transTable = worker->rTranslationTable[i];
+              auto &pBuffer = propertyBuffers[i];
+
               for (size_t j = start; j < end; j++)
               {
-                GNode lid = worker->rTranslationTable[i][updated_property_vertices[j]];
-                vertex_properties.set(lid, propertyBuffers[i][j]);
+                GNode lid = transTable[updated_property_vertices[j]];
+                vertex_properties.set(lid, pBuffer[j]);
               }
-            });
+            },
+            galois::loopname("Update Property Vertices"),
+            galois::no_stats(),
+            galois::steal());
       }
 
       for (int i = 0; i < num_compute; i++)
@@ -348,7 +380,7 @@ void GraphAlgorithm<VertexProperty>::run()
         worker->bitCommVector[i].reset();
       }
 
-      idxTracker.assign(num_compute, 0);
+      cPhase1_timer.stop();
     }
 
     spdlog::debug("[Proc {}] Barrier 1: {}", worker->node_id, iteration);
@@ -358,9 +390,12 @@ void GraphAlgorithm<VertexProperty>::run()
     {
       if (ndp_decision == NDP_OFFLOAD)
       {
+        traversal_timer.start();
         worker->traverse(*this);
+        traversal_timer.stop();
 
         // const galois::ThreadSafeOrderedSet<GNode> &updated_vertices = vertex_updates.getUpdatedVertices();
+        cPhase2_timer.start();
         const std::vector<GNode> updated_vertices = vertex_updates.getUpdatedVertices();
 
         // for (const GNode &lid : updated_vertices)
@@ -393,11 +428,16 @@ void GraphAlgorithm<VertexProperty>::run()
                 size_t offset = std::accumulate(
                     perThreadVCounts[worker_id].begin(), std::next(perThreadVCounts[worker_id].begin(), tid), 0);
 
-                for (uint64_t j = 0; j < perThreadVCounts[worker_id][tid]; j++)
+                size_t &nVertices = perThreadVCounts[worker_id][tid];
+                auto &offsetMatrix = perThreadOffsetMatrix[tid][worker_id];
+                auto &transTable = worker->sTranslationTable[worker_id];
+                auto &pBuffer = propertyBuffers[worker_id];
+
+                for (uint64_t j = 0; j < nVertices; j++)
                 {
-                  GNode lid = perThreadOffsetMatrix[worker_id][tid][j];
-                  worker->bitCommVector[worker_id].set(worker->sTranslationTable[worker_id][lid]);
-                  propertyBuffers[worker_id][offset + j] = vertex_updates[lid];
+                  GNode lid = offsetMatrix[j];
+                  worker->bitCommVector[worker_id].set(transTable[lid]);
+                  pBuffer[offset + j] = vertex_updates[lid];
 
                   // spdlog::debug(
                   //     "[Proc {}/{}] Sending propertyBuffers: {}/{} to Compute Node: {}",
@@ -408,28 +448,32 @@ void GraphAlgorithm<VertexProperty>::run()
                   //     worker_id);
                 }
               }
-            });
+            },
+            galois::loopname("Generate Per Thread Matrix"),
+            galois::no_stats(),
+            galois::steal());
 
-        for (int i = 0; i < num_compute; i++)
+        for (int worker_id = 0; worker_id < num_compute; worker_id++)
         {
           // spdlog::info("[Proc {}/{}] Property Buffers: {}", this->worker->node_id, i, fmt_array(propertyBuffers[i]));
-
           net.Isend(
-              i,
+              worker_id,
               0,
-              worker->bitCommVector[i].bitvec.data(),
-              worker->bitCommVector[i].size_bytes(),
+              worker->bitCommVector[worker_id].bitvec.data(),
+              worker->bitCommVector[worker_id].size_bytes(),
               MPI_UINT64_T,
-              &bv_requests[i]);
+              &bv_requests[worker_id]);
 
           net.Isend(
-              i,
+              worker_id,
               0,
-              propertyBuffers[i].data(),
-              std::accumulate(perThreadVCounts[i].begin(), perThreadVCounts[i].end(), 0),
+              propertyBuffers[worker_id].data(),
+              std::accumulate(perThreadVCounts[worker_id].begin(), perThreadVCounts[worker_id].end(), 0),
               MPI_VERTEX_PROPERTY_T,
-              &data_requests[i]);
+              &data_requests[worker_id]);
         }
+
+        cPhase2_timer.stop();
       }
       else if (ndp_decision == NO_OFFLOAD)
       {
@@ -483,6 +527,7 @@ void GraphAlgorithm<VertexProperty>::run()
     }
     else if (node_type == COMPUTE_NODE)
     {
+      cPhase2_timer.start();
       if (ndp_decision == NDP_OFFLOAD)
       {
         uint64_t bytes_recv = 0;
@@ -568,8 +613,6 @@ void GraphAlgorithm<VertexProperty>::run()
             const size_t &nVertices = updated_property_vertices.size();
             const size_t &uVerticesPerThread = 1 + ((nVertices > nGaloisThreads) ? nVertices / nGaloisThreads : 0);
 
-            // spdlog::info("[Proc {}] Updated Vertices: {}", this->worker->node_id, fmt_array(updated_property_vertices));
-
             galois::do_all(
                 galois::iterate(0ul, nGaloisThreads),
                 [&](const size_t tid)
@@ -578,14 +621,23 @@ void GraphAlgorithm<VertexProperty>::run()
                   const size_t &end =
                       (tid + 1) * uVerticesPerThread > nVertices ? nVertices : (tid + 1) * uVerticesPerThread;
 
+                  auto &pBuffer = propertyBuffers[i];
+                  auto &transTable = worker->rTranslationTable[i];
+
                   for (size_t j = start; j < end; j++)
                   {
-                    GNode lid = worker->rTranslationTable[i][updated_property_vertices[j]];
-                    worker->aggregate(*this, lid, propertyBuffers[i][j]);
+                    GNode lid = transTable[updated_property_vertices[j]];
+                    worker->aggregate(*this, lid, pBuffer[j]);
                   }
-                });
+                },
+                galois::loopname("Aggregate Property Vertices"),
+                galois::no_stats(),
+                galois::steal());
+
+            // spdlog::info("[Proc {}] Updated Vertices: {}", this->worker->node_id, fmt_array(updated_property_vertices));
           }
         }
+        cPhase2_timer.stop();
       }
       else if (ndp_decision == NO_OFFLOAD)
       {
@@ -653,7 +705,9 @@ void GraphAlgorithm<VertexProperty>::run()
       // this->frontier.clear();
       this->frontier.reset();
 
+      update_timer.start();
       worker->update(*this);
+      update_timer.stop();
 
       if (termination_check())
       {
@@ -709,4 +763,9 @@ void GraphAlgorithm<VertexProperty>::run()
     galois::runtime::reportStat_Single(algorithm_name, "TotalBytesMoved", total_bytes);
     galois::runtime::reportStat_Single(algorithm_name, "Timer_0", timer.get());
   }
+
+  galois::runtime::reportStat_Single(algorithm_name, "TraversalTimer", traversal_timer.get());
+  galois::runtime::reportStat_Single(algorithm_name, "UpdateTimer", update_timer.get());
+  galois::runtime::reportStat_Single(algorithm_name, "CPhase1Timer", cPhase1_timer.get());
+  galois::runtime::reportStat_Single(algorithm_name, "CPhase2Timer", cPhase2_timer.get());
 }

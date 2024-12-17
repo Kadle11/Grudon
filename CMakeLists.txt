@@ -32,6 +32,12 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/modules")
 # Setup alternative names
 #
 
+# GPROF Compilation Scheme
+if (GPROF)
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pg")
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -pg")
+endif()
+
 if(${PROJECT_NAME}_USE_ALT_NAMES)
   string(TOLOWER ${PROJECT_NAME} PROJECT_NAME_LOWERCASE)
   string(TOUPPER ${PROJECT_NAME} PROJECT_NAME_UPPERCASE)
@@ -181,6 +187,10 @@ find_path(NUMA_INCLUDE_DIR numa.h)
 target_include_directories(${PROJECT_NAME} PRIVATE ${NUMA_INCLUDE_DIR})
 target_link_libraries(${PROJECT_NAME} PRIVATE ${NUMA_LIBRARY})
 
+# Add Abseil
+find_package(absl REQUIRED)
+target_link_libraries(${PROJECT_NAME} PRIVATE absl::flat_hash_map)
+target_link_libraries(${PROJECT_NAME} PRIVATE absl::node_hash_map)
 
 # Add Galois
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/extern/Galois EXCLUDE_FROM_ALL)

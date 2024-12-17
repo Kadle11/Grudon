@@ -26,8 +26,8 @@
 #include <set>
 #include <shared_mutex>
 #include <string>
-#include <unordered_map>
 #include <vector>
+#include <unordered_map>
 
 #include "Graph.hpp"
 #include "Logger.hpp"
@@ -232,8 +232,8 @@ class DistributedGraph
       uint32_t& node_id,
       NODE_TYPE& node_type,
       std::vector<galois::DynamicBitSet>& bitCommVector,
-      std::vector<std::unordered_map<GNode, GNode>>& sTranslationTable,
-      std::vector<std::unordered_map<GNode, GNode>>& rTranslationTable,
+      std::vector<std::vector<GNode>>& sTranslationTable,
+      std::vector<std::vector<GNode>>& rTranslationTable,
       galois::LargeArray<uint64_t>& out_degrees,
       galois::LargeArray<bool>& coverage_vector,
       MPICore& net,
@@ -276,12 +276,12 @@ class DistributedGraph
   Graph bgraph;
 
   std::vector<galois::DynamicBitSet>& bitCommVector;
-  std::vector<std::unordered_map<GNode, GNode>>& sTranslationTable;
-  std::vector<std::unordered_map<GNode, GNode>>& rTranslationTable;
+  std::vector<std::vector<GNode>>& sTranslationTable;
+  std::vector<std::vector<GNode>>& rTranslationTable;
   MPICore& net;
 
-  std::unordered_map<GNode, GNode> gid_to_lid;
-  std::unordered_map<GNode, GNode> lid_to_gid;
+  std::vector<GNode> gid_to_lid;
+  std::vector<GNode> lid_to_gid;
   galois::LargeArray<bool>& coverage_vector;
   galois::LargeArray<uint64_t>& out_degrees;
 };

@@ -105,8 +105,8 @@ int main(int argc, char **argv)
   NODE_TYPE node_type = (node_id < num_compute) ? COMPUTE_NODE : MEMORY_NODE;
 
   std::vector<galois::DynamicBitSet> bitCommVector;
-  std::vector<std::unordered_map<GNode, GNode>> rTranslationTable;
-  std::vector<std::unordered_map<GNode, GNode>> sTranslationTable;
+  std::vector<std::vector<GNode>> rTranslationTable;
+  std::vector<std::vector<GNode>> sTranslationTable;
   galois::LargeArray<uint64_t> out_degrees;
   galois::LargeArray<bool> coverage_vector;
   uint64_t num_vertices = 0;
@@ -150,6 +150,8 @@ int main(int argc, char **argv)
     graph_algorithm->init();
     graph_algorithm->run();
 
+    // graph_algorithm->verify();
+
     delete graph_algorithm;
   }
   else if (algorithm == "cc")
@@ -160,6 +162,8 @@ int main(int argc, char **argv)
     graph_algorithm->init();
     graph_algorithm->run();
 
+    graph_algorithm->verify();
+
     delete graph_algorithm;
   }
   else if (algorithm == "sssp")
@@ -167,8 +171,10 @@ int main(int argc, char **argv)
     GraphAlgorithm<uint32_t> *graph_algorithm = new SSSP<uint32_t>(
         node_type, "SingleSourceShortestPath", graph_path, num_compute, num_memory, node_id, net, partitioning_scheme_file);
 
-    graph_algorithm->init();    
+    graph_algorithm->init();
     graph_algorithm->run();
+
+    graph_algorithm->verify();
 
     delete graph_algorithm;
   }

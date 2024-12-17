@@ -20,8 +20,8 @@ DistributedGraph::DistributedGraph(
     uint32_t& node_id,
     NODE_TYPE& node_type,
     std::vector<galois::DynamicBitSet>& bitCommVector,
-    std::vector<std::unordered_map<GNode, GNode>>& sTranslationTable,
-    std::vector<std::unordered_map<GNode, GNode>>& rTranslationTable,
+    std::vector<std::vector<GNode>>& sTranslationTable,
+    std::vector<std::vector<GNode>>& rTranslationTable,
     galois::LargeArray<uint64_t>& out_degrees,
     galois::LargeArray<bool>& coverage_vector,
     MPICore& net,
@@ -134,6 +134,9 @@ DistributedGraph::DistributedGraph(
   net.barrier();
   lgraph.allocateFrom(num_vertices, num_edges);
   lgraph.constructNodes();
+
+  lid_to_gid.resize(total_vertices);
+  gid_to_lid.resize(total_vertices);
 
   if (node_type == COMPUTE_NODE)
   {
@@ -636,8 +639,8 @@ DistributedGraph::DistributedGraph(
     // Reserve the Translation Table Sizes
     for (size_t i = 0; i < num_compute; i++)
     {
-      sTranslationTable[i].reserve(translationTableSizes[i]);
-      rTranslationTable[i].reserve(translationTableSizes[i]);
+      sTranslationTable[i].resize(total_vertices);
+      rTranslationTable[i].resize(total_vertices);
     }
 
     // std::sort(vbuffer.begin(), vbuffer.end());
@@ -694,8 +697,8 @@ DistributedGraph::DistributedGraph(
     // Reserve the Translation Table Sizes
     for (size_t i = 0; i < num_memory; i++)
     {
-      sTranslationTable[i].reserve(translationTableSizes[i]);
-      rTranslationTable[i].reserve(translationTableSizes[i]);
+      sTranslationTable[i].resize(total_vertices);
+      rTranslationTable[i].resize(total_vertices);
     }
 
     for (GNode lnode = 0; lnode < num_vertices; ++lnode)
@@ -890,8 +893,8 @@ void DistributedGraph::printState()
             "[Proc {}] Memory Node {}: GNode {} -> Set Bit {}",
             node_id,
             i,
-            lid_to_gid[translationElem.first],
-            translationElem.second);
+            lid_to_gid[translationElem],
+            translationElem);
       }
     }
 
@@ -903,8 +906,8 @@ void DistributedGraph::printState()
             "[Proc {}] Memory Node {}: Test Bit {} -> GNode {}",
             node_id,
             i,
-            translationElem.first,
-            lid_to_gid[translationElem.second]);
+            translationElem,
+            lid_to_gid[translationElem]);
       }
     }
   }
@@ -918,8 +921,8 @@ void DistributedGraph::printState()
             "[Proc {}] Compute Node {}: GNode {} -> Set Bit {}",
             node_id,
             i,
-            lid_to_gid[translationElem.first],
-            translationElem.second);
+            lid_to_gid[translationElem],
+            translationElem);
       }
     }
 
@@ -931,8 +934,8 @@ void DistributedGraph::printState()
             "[Proc {}] Compute Node {}: Test Bit {} -> GNode {}",
             node_id,
             i,
-            translationElem.first,
-            lid_to_gid[translationElem.second]);
+            translationElem,
+            lid_to_gid[translationElem]);
       }
     }
   }
