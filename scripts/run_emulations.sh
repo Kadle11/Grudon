@@ -45,7 +45,7 @@ fi
 # Check if the symmetric graph exists
 if [ ! -f $SYM_GRAPH_PATH ]; then
     echo "Symmetric graph file not found: $SYM_GRAPH_PATH"
-    exit 1      
+#    exit 1      
 fi
 
 # Function to Reset HugePage Allocation 
@@ -74,12 +74,12 @@ for i in {1..5};
 do
 
     LOG_SUFFIX=Gluon_"$GRAPH_NAME"_3N_run$i.log
-    # reset_hugepage_allocation
-    # GALOIS_DO_NOT_BIND_THREADS=1 time mpirun -n 3 --npersocket 1 --map-by socket:PE=$COMPUTE_NODE_CORES --report-bindings --report-pid - $GALOIS_HOME/pagerank/pagerank-push-dist $GRAPH_PATH -exec=Sync  -runs=1 --maxIterations=20 -t=$COMPUTE_NODE_CORES 2>&1 | tee $LOG_DIR/pr_$LOG_SUFFIX;
     reset_hugepage_allocation
-    GALOIS_DO_NOT_BIND_THREADS=1 time mpirun -n 3 --npersocket 1 --map-by socket:PE=$COMPUTE_NODE_CORES --report-bindings $GALOIS_HOME/connected-components/connected-components-push-dist $SYM_GRAPH_PATH -symmetricGraph -exec=Sync  -runs=1 -t=$COMPUTE_NODE_CORES 2>&1 | tee $LOG_DIR/cc_$LOG_SUFFIX;
+    GALOIS_DO_NOT_BIND_THREADS=1 time mpirun -n 3 --npersocket 1 --map-by socket:PE=$COMPUTE_NODE_CORES --report-bindings --report-pid - $GALOIS_HOME/pagerank/pagerank-push-dist $GRAPH_PATH -exec=Sync  -runs=1 --maxIterations=20 -t=$COMPUTE_NODE_CORES 2>&1 | tee $LOG_DIR/pr_$LOG_SUFFIX;
     # reset_hugepage_allocation
-    # GALOIS_DO_NOT_BIND_THREADS=1 time mpirun -n 3 --npersocket 1 --map-by socket:PE=$COMPUTE_NODE_CORES --report-bindings $GALOIS_HOME/sssp/sssp-push-dist $GRAPH_PATH -exec=Sync  -runs=1 -t=$COMPUTE_NODE_CORES 2>&1 | tee $LOG_DIR/sssp_$LOG_SUFFIX;  
+    # GALOIS_DO_NOT_BIND_THREADS=1 time mpirun -n 3 --npersocket 1 --map-by socket:PE=$COMPUTE_NODE_CORES --report-bindings $GALOIS_HOME/connected-components/connected-components-push-dist $SYM_GRAPH_PATH -symmetricGraph -exec=Sync  -runs=1 -t=$COMPUTE_NODE_CORES 2>&1 | tee $LOG_DIR/cc_$LOG_SUFFIX;
+    reset_hugepage_allocation
+    GALOIS_DO_NOT_BIND_THREADS=1 time mpirun -n 3 --npersocket 1 --map-by socket:PE=$COMPUTE_NODE_CORES --report-bindings $GALOIS_HOME/sssp/sssp-push-dist $GRAPH_PATH -exec=Sync  -runs=1 -t=$COMPUTE_NODE_CORES 2>&1 | tee $LOG_DIR/sssp_$LOG_SUFFIX;  
 done
 
 cd $EMULATION_SCRIPTS
@@ -89,12 +89,12 @@ cd $RUN_SCRIPTS_DIR
 for i in {1..5}; 
 do 
     LOG_SUFFIX=GraphQOpt_"$GRAPH_NAME"_3N_run$i.log
-    # reset_hugepage_allocation
-    # GALOIS_DO_NOT_BIND_THREADS=1 time mpirun -n 3 --npersocket 1 --map-by socket:PE=$MEMORY_NODE_CORES --report-bindings $GALOIS_HOME/pagerank/pagerank-push-dist $GRAPH_PATH -exec=Sync  -runs=1 --maxIterations=20 -t=$MEMORY_NODE_LCORES 2>&1 | tee $LOG_DIR/pr_$LOG_SUFFIX;
     reset_hugepage_allocation
-    GALOIS_DO_NOT_BIND_THREADS=1 time mpirun -n 3 --npersocket 1 --map-by socket:PE=$MEMORY_NODE_CORES --report-bindings $GALOIS_HOME/connected-components/connected-components-push-dist $SYM_GRAPH_PATH -symmetricGraph -exec=Sync  -runs=1 -t=$MEMORY_NODE_LCORES 2>&1 | tee $LOG_DIR/cc_$LOG_SUFFIX;
+    GALOIS_DO_NOT_BIND_THREADS=1 time mpirun -n 3 --npersocket 1 --map-by socket:PE=$MEMORY_NODE_CORES --report-bindings $GALOIS_HOME/pagerank/pagerank-push-dist $GRAPH_PATH -exec=Sync  -runs=1 --maxIterations=20 -t=$MEMORY_NODE_LCORES 2>&1 | tee $LOG_DIR/pr_$LOG_SUFFIX;
     # reset_hugepage_allocation
-    # GALOIS_DO_NOT_BIND_THREADS=1 time mpirun -n 3 --npersocket 1 --map-by socket:PE=$MEMORY_NODE_CORES --report-bindings $GALOIS_HOME/sssp/sssp-push-dist $GRAPH_PATH -exec=Sync  -runs=1 -t=$MEMORY_NODE_LCORES 2>&1 | tee $LOG_DIR/sssp_$LOG_SUFFIX;
+    # GALOIS_DO_NOT_BIND_THREADS=1 time mpirun -n 3 --npersocket 1 --map-by socket:PE=$MEMORY_NODE_CORES --report-bindings $GALOIS_HOME/connected-components/connected-components-push-dist $SYM_GRAPH_PATH -symmetricGraph -exec=Sync  -runs=1 -t=$MEMORY_NODE_LCORES 2>&1 | tee $LOG_DIR/cc_$LOG_SUFFIX;
+    reset_hugepage_allocation
+    GALOIS_DO_NOT_BIND_THREADS=1 time mpirun -n 3 --npersocket 1 --map-by socket:PE=$MEMORY_NODE_CORES --report-bindings $GALOIS_HOME/sssp/sssp-push-dist $GRAPH_PATH -exec=Sync  -runs=1 -t=$MEMORY_NODE_LCORES 2>&1 | tee $LOG_DIR/sssp_$LOG_SUFFIX;
 done
 
 cd $EMULATION_SCRIPTS
@@ -106,23 +106,23 @@ if [ ! -f $PARTITION_PATH ]; then
     for i in {1..5}; 
     do
         LOG_SUFFIX=Groudon_"$GRAPH_NAME"_3N_run$i.log 
-        # reset_hugepage_allocation
-        # GALOIS_DO_NOT_BIND_THREADS=1 time mpirun -n 4 --npersocket 1 --map-by socket:PE=$MEMORY_NODE_CORES --report-bindings $GROUDON_BIN -g $GRAPH_PATH -c 1 -m 3 -t $MEMORY_NODE_LCORES -a pr 2>&1 | tee $LOG_DIR/pr_$LOG_SUFFIX;
         reset_hugepage_allocation
-        GALOIS_DO_NOT_BIND_THREADS=1 time mpirun -n 4 --npersocket 1 --map-by socket:PE=$MEMORY_NODE_CORES --report-bindings $GROUDON_BIN -g $SYM_GRAPH_PATH -c 1 -m 3 -t $MEMORY_NODE_LCORES -a cc  2>&1 | tee $LOG_DIR/cc_$LOG_SUFFIX;
+        GALOIS_DO_NOT_BIND_THREADS=1 time mpirun -n 4 --npersocket 1 --map-by socket:PE=$MEMORY_NODE_CORES --report-bindings $GROUDON_BIN -g $GRAPH_PATH -c 1 -m 3 -t $MEMORY_NODE_LCORES -a pr 2>&1 | tee $LOG_DIR/pr_$LOG_SUFFIX;
         # reset_hugepage_allocation
-        # GALOIS_DO_NOT_BIND_THREADS=1 time mpirun -n 4 --npersocket 1 --map-by socket:PE=$MEMORY_NODE_CORES --report-bindings $GROUDON_BIN -g $GRAPH_PATH -c 1 -m 3 -t $MEMORY_NODE_LCORES -a sssp 2>&1 | tee $LOG_DIR/sssp_$LOG_SUFFIX;
+        # GALOIS_DO_NOT_BIND_THREADS=1 time mpirun -n 4 --npersocket 1 --map-by socket:PE=$MEMORY_NODE_CORES --report-bindings $GROUDON_BIN -g $SYM_GRAPH_PATH -c 1 -m 3 -t $MEMORY_NODE_LCORES -a cc  2>&1 | tee $LOG_DIR/cc_$LOG_SUFFIX;
+        reset_hugepage_allocation
+        GALOIS_DO_NOT_BIND_THREADS=1 time mpirun -n 4 --npersocket 1 --map-by socket:PE=$MEMORY_NODE_CORES --report-bindings $GROUDON_BIN -g $GRAPH_PATH -c 1 -m 3 -t $MEMORY_NODE_LCORES -a sssp 2>&1 | tee $LOG_DIR/sssp_$LOG_SUFFIX;
     done
 else
     for i in {1..5}; 
     do
         LOG_SUFFIX=Groudon_"$GRAPH_NAME"_3N_run$i.log 
-        # reset_hugepage_allocation
-        # GALOIS_DO_NOT_BIND_THREADS=1 time mpirun -n 4 --npersocket 1 --map-by socket:PE=$MEMORY_NODE_CORES --report-bindings $GROUDON_BIN -g $GRAPH_PATH -c 1 -m 3 -t $MEMORY_NODE_LCORES -a pr -p $PARTITION_PATH 2>&1 | tee $LOG_DIR/pr_$LOG_SUFFIX;
         reset_hugepage_allocation
-        GALOIS_DO_NOT_BIND_THREADS=1 time mpirun -n 4 --npersocket 1 --map-by socket:PE=$MEMORY_NODE_CORES --report-bindings $GROUDON_BIN -g $SYM_GRAPH_PATH -c 1 -m 3 -t $MEMORY_NODE_LCORES -a cc -p $PARTITION_PATH 2>&1 | tee $LOG_DIR/cc_$LOG_SUFFIX;
+        GALOIS_DO_NOT_BIND_THREADS=1 time mpirun -n 4 --npersocket 1 --map-by socket:PE=$MEMORY_NODE_CORES --report-bindings $GROUDON_BIN -g $GRAPH_PATH -c 1 -m 3 -t $MEMORY_NODE_LCORES -a pr -p $PARTITION_PATH 2>&1 | tee $LOG_DIR/pr_$LOG_SUFFIX;
         # reset_hugepage_allocation
-        # GALOIS_DO_NOT_BIND_THREADS=1 time mpirun -n 4 --npersocket 1 --map-by socket:PE=$MEMORY_NODE_CORES --report-bindings $GROUDON_BIN -g $GRAPH_PATH -c 1 -m 3 -t $MEMORY_NODE_LCORES -a sssp -p $PARTITION_PATH 2>&1 | tee $LOG_DIR/sssp_$LOG_SUFFIX;
+        # GALOIS_DO_NOT_BIND_THREADS=1 time mpirun -n 4 --npersocket 1 --map-by socket:PE=$MEMORY_NODE_CORES --report-bindings $GROUDON_BIN -g $SYM_GRAPH_PATH -c 1 -m 3 -t $MEMORY_NODE_LCORES -a cc -p $PARTITION_PATH 2>&1 | tee $LOG_DIR/cc_$LOG_SUFFIX;
+        reset_hugepage_allocation
+        GALOIS_DO_NOT_BIND_THREADS=1 time mpirun -n 4 --npersocket 1 --map-by socket:PE=$MEMORY_NODE_CORES --report-bindings $GROUDON_BIN -g $GRAPH_PATH -c 1 -m 3 -t $MEMORY_NODE_LCORES -a sssp -p $PARTITION_PATH 2>&1 | tee $LOG_DIR/sssp_$LOG_SUFFIX;
     done
 fi
 

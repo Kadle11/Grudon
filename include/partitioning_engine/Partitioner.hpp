@@ -5,7 +5,7 @@
 
 #include "Graph.hpp"
 #include "Logger.hpp"
-#include "metis.h"
+// #include "metis.h"
 
 void NaivePartitioner(
     Graph& graph,

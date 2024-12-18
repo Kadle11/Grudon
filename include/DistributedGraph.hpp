@@ -33,6 +33,7 @@
 #include "Logger.hpp"
 #include "MPI.hpp"
 
+
 using Graph = galois::graphs::LC_CSR_Graph<uint64_t, uint32_t>::with_no_lockable<true>::type;
 using GNode = Graph::GraphNode;
 
@@ -231,9 +232,11 @@ class DistributedGraph
       uint64_t& num_edges,
       uint32_t& node_id,
       NODE_TYPE& node_type,
-      std::vector<galois::DynamicBitSet>& bitCommVector,
+      std::vector<galois::DynamicBitSet>& bitCommVector_Send,
+      std::vector<galois::DynamicBitSet>& bitCommVector_Recv,
       std::vector<std::vector<GNode>>& sTranslationTable,
       std::vector<std::vector<GNode>>& rTranslationTable,
+      std::vector<std::unordered_map<GNode, GNode>>& sAggrTranslationTable,
       galois::LargeArray<uint64_t>& out_degrees,
       galois::LargeArray<bool>& coverage_vector,
       MPICore& net,
@@ -259,7 +262,7 @@ class DistributedGraph
 
   Graph lgraph;
 
- private:
+ 
   size_t& num_compute;
   size_t& num_memory;
   uint64_t& num_vertices;
@@ -275,9 +278,11 @@ class DistributedGraph
   std::vector<uint64_t> mirror_partition_sizes;
   Graph bgraph;
 
-  std::vector<galois::DynamicBitSet>& bitCommVector;
+  std::vector<galois::DynamicBitSet>& bitCommVector_Send;
+  std::vector<galois::DynamicBitSet>& bitCommVector_Recv;
   std::vector<std::vector<GNode>>& sTranslationTable;
   std::vector<std::vector<GNode>>& rTranslationTable;
+  std::vector<std::unordered_map<GNode, GNode>>& sAggrTranslationTable;
   MPICore& net;
 
   std::vector<GNode> gid_to_lid;
@@ -286,4 +291,4 @@ class DistributedGraph
   galois::LargeArray<uint64_t>& out_degrees;
 };
 
-#endif  // DISTRIBUTEDGRAPH_HPP
+#endif
