@@ -19,7 +19,8 @@ class Worker
       size_t& num_memory,
       uint32_t& node_id,
       NODE_TYPE node_type,
-      MPICore& net);
+      MPICore& net,
+      std::string partitioning_scheme_file);
 
   Worker(
       DistributedGraph* distributed_graph,
@@ -78,6 +79,10 @@ class AggregateWorker : public Worker<T>
   // Dummy Functions
   void update(GraphAlgorithm<T>& algorithm) override;
   void traverse(GraphAlgorithm<T>& algorithm) override;
+
+  std::vector<MPI_Request> bv_requests;
+  std::vector<MPI_Request> data_requests;
+  std::vector<MPI_Status> statuses;
 };
 
 template<typename T>

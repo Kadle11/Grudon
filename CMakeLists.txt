@@ -187,11 +187,6 @@ find_path(NUMA_INCLUDE_DIR numa.h)
 target_include_directories(${PROJECT_NAME} PRIVATE ${NUMA_INCLUDE_DIR})
 target_link_libraries(${PROJECT_NAME} PRIVATE ${NUMA_LIBRARY})
 
-# Add Abseil
-find_package(absl REQUIRED)
-target_link_libraries(${PROJECT_NAME} PRIVATE absl::flat_hash_map)
-target_link_libraries(${PROJECT_NAME} PRIVATE absl::node_hash_map)
-
 # Add Galois
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/extern/Galois EXCLUDE_FROM_ALL)
 target_include_directories(${PROJECT_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/extern/Galois/include)

@@ -45,7 +45,7 @@ OFFLOAD_DECISION NDPEngine(
     return NDP_OFFLOAD;
   }
 
-  // spdlog::info("No Offload, Frontier Size: {}", frontier.size());
+  spdlog::info("No Offload, Frontier Size: {}", frontier.size());
 
   return NO_OFFLOAD;
 }

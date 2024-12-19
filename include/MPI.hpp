@@ -68,6 +68,7 @@ class MPICore
     MPI_Wait(request, status);
     MPI_Get_count(status, datatype, &local_count);
     MPI_Type_size(datatype, &rtype_size);
+    bytes_moved += local_count * rtype_size;
     return local_count * rtype_size;
   }
 

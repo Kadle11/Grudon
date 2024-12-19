@@ -150,7 +150,7 @@ int main(int argc, char **argv)
     graph_algorithm->init();
     graph_algorithm->run();
 
-    // graph_algorithm->verify();
+    graph_algorithm->verify();
 
     delete graph_algorithm;
   }

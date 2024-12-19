@@ -651,6 +651,8 @@ DistributedGraph::DistributedGraph(
     }
 
     // std::sort(vbuffer.begin(), vbuffer.end());
+    galois::DynamicBitSet vbufferBitset;
+    vbufferBitset.resize(master_partition.size());
     for (GNode gnode : vbuffer)
     {
       GNode lnode = gid_to_lid[gnode];
@@ -667,17 +669,21 @@ DistributedGraph::DistributedGraph(
       //     masterID);
 
       addrTranslationTableIdxs[masterID]++;
+      vbufferBitset.set(gnode);
     }
+
     for (int64_t gnode = 0; gnode < master_partition.size(); gnode++)
     {
       uint64_t masterID = master_partition[gnode];
-      if (gid_to_lid.find(gnode) != gid_to_lid.end())
+
+      if (vbufferBitset.test(gnode))
       {
         GNode lnode = gid_to_lid[gnode];
         sAggrTranslationTable[masterID][lnode] = aggrAddrTranslationTableIdxs[masterID];
       }
       aggrAddrTranslationTableIdxs[masterID]++;
     }
+    
     for (int i = 0; i < num_compute; i++)
     {
       assert(addrTranslationTableIdxs[i] == translationTableSizes[i]);
@@ -910,11 +916,7 @@ void DistributedGraph::printState()
       for (auto& translationElem : sTranslationTable[i])
       {
         spdlog::info(
-            "[Proc {}] Memory Node {}: GNode {} -> Set Bit {}",
-            node_id,
-            i,
-            lid_to_gid[translationElem],
-            translationElem);
+            "[Proc {}] Memory Node {}: GNode {} -> Set Bit {}", node_id, i, lid_to_gid[translationElem], translationElem);
       }
     }
 
@@ -923,11 +925,7 @@ void DistributedGraph::printState()
       for (auto& translationElem : rTranslationTable[i])
       {
         spdlog::info(
-            "[Proc {}] Memory Node {}: Test Bit {} -> GNode {}",
-            node_id,
-            i,
-            translationElem,
-            lid_to_gid[translationElem]);
+            "[Proc {}] Memory Node {}: Test Bit {} -> GNode {}", node_id, i, translationElem, lid_to_gid[translationElem]);
       }
     }
   }
@@ -938,11 +936,7 @@ void DistributedGraph::printState()
       for (auto& translationElem : sTranslationTable[i])
       {
         spdlog::info(
-            "[Proc {}] Compute Node {}: GNode {} -> Set Bit {}",
-            node_id,
-            i,
-            lid_to_gid[translationElem],
-            translationElem);
+            "[Proc {}] Compute Node {}: GNode {} -> Set Bit {}", node_id, i, lid_to_gid[translationElem], translationElem);
       }
     }
 
@@ -951,11 +945,7 @@ void DistributedGraph::printState()
       for (auto& translationElem : rTranslationTable[i])
       {
         spdlog::info(
-            "[Proc {}] Compute Node {}: Test Bit {} -> GNode {}",
-            node_id,
-            i,
-            translationElem,
-            lid_to_gid[translationElem]);
+            "[Proc {}] Compute Node {}: Test Bit {} -> GNode {}", node_id, i, translationElem, lid_to_gid[translationElem]);
       }
     }
   }

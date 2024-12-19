@@ -198,11 +198,11 @@ void GraphAlgorithm<VertexProperty>::run()
 
   timer.start();
 
-  while (worker_completion_count != num_compute && iteration < MAX_ITERATIONS)
+  while (worker_completion_count != num_compute && iteration < 1000)
   {
-    memory_offload = NO_OFFLOAD;
+    memory_offload = NDP_OFFLOAD;
     switch_offload = NO_OFFLOAD;
-    ndp_decision = NO_OFFLOAD;
+    ndp_decision = NDP_OFFLOAD;
     inc_decision = NO_OFFLOAD;
 
     worker_completion_count = 0;
@@ -210,14 +210,15 @@ void GraphAlgorithm<VertexProperty>::run()
 
     if (node_type == COMPUTE_NODE)
     {
-      memory_offload = NDP_OFFLOAD;
-      // NDPEngine(frontier, worker->coverage_vector, ndp_offload_threshold, *worker->distributed_graph, num_compute);
+      // memory_offload = NDPEngine(frontier, worker->coverage_vector, ndp_offload_threshold, *worker->distributed_graph,
+      // num_memory);
 
       // switch_offload = INCEngine(frontier, worker->out_degrees, *worker->distributed_graph, inc_offload_threshold);
     }
+
     switch_offload = INC_OFFLOAD;
 
-    net.allReduce(&memory_offload, &ndp_decision, 1, MPI_UINT32_T, MPI_MIN);
+    // net.allReduce(&memory_offload, &ndp_decision, 1, MPI_UINT32_T, MPI_MIN);
     // net.allReduce(&switch_offload, &inc_decision, 1, MPI_UINT32_T, MPI_MIN);
 
     // Send the Frontier to all Traversers
@@ -225,23 +226,6 @@ void GraphAlgorithm<VertexProperty>::run()
     {
       cPhase1_timer.start();
       const std::vector<GNode> &current_frontier = this->frontier.getOffsets();
-
-      // for (const GNode lid : frontier.getOffsets())
-      // {
-      //   uint32_t worker_id = worker->getVertexMemoryPartition(lid);
-      //   worker->bitCommVector_Send[worker_id].set(worker->sTranslationTable[worker_id][lid]);
-      //   propertyBuffers[worker_id][idxTracker[worker_id]] = vertex_properties[lid];
-      //   idxTracker[worker_id]++;
-
-      //   spdlog::debug(
-      //       "[Proc {}/{}] Sending GVertex/Trans/Property: {}/{}/{} to Memory Node: {}",
-      //       worker->node_id,
-      //       iteration,
-      //       worker->distributed_graph->getGlobalNode(lid),
-      //       worker->sTranslationTable[worker_id][lid],
-      //       vertex_properties[lid],
-      //       worker_id);
-      // }
 
       generatePerThreadMatrix(current_frontier);
 
@@ -306,6 +290,7 @@ void GraphAlgorithm<VertexProperty>::run()
       }
 
       cPhase1_timer.stop();
+      idxTracker.assign(num_memory, 0);
     }
     else if (node_type == MEMORY_NODE)
     {
@@ -349,8 +334,7 @@ void GraphAlgorithm<VertexProperty>::run()
         //   }
         // }
 
-        worker->bitCommVector_Recv[i].reset();
-        const std::vector<GNode> &updated_property_vertices = worker->bitCommVector[i].getOffsets();
+        const std::vector<GNode> &updated_property_vertices = worker->bitCommVector_Recv[i].getOffsets();
         const size_t &nVertices = updated_property_vertices.size();
         const size_t &uVerticesPerThread = 1 + ((nVertices > nGaloisThreads) ? nVertices / nGaloisThreads : 0);
 
@@ -383,6 +367,7 @@ void GraphAlgorithm<VertexProperty>::run()
       }
 
       cPhase1_timer.stop();
+      idxTracker.assign(num_compute, 0);
     }
 
     spdlog::debug("[Proc {}] Barrier 1: {}", worker->node_id, iteration);
@@ -405,21 +390,45 @@ void GraphAlgorithm<VertexProperty>::run()
           std::vector<std::map<GNode, VertexProperty>> propertyMap(num_compute);
           for (const GNode &lid : updated_vertices)
           {
-            GNode gid = worker->distributed_graph->getGlobalNode(lid);
-            uint32_t worker_id = worker->getVertexComputePartition(gid);
+            uint32_t worker_id = worker->getVertexComputePartition(lid);
             worker->bitCommVector_Send[worker_id].set(worker->sAggrTranslationTable[worker_id][lid]);
             propertyMap[worker_id][worker->sAggrTranslationTable[worker_id][lid]] = vertex_updates[lid];
             // propertyBuffers[worker_id][idxTracker[worker_id]] = vertex_updates[lid];
 
-            spdlog::debug(
-                "[Proc {}/{}] Sending GVertex/Update: {}/{} to Compute Node: {}",
-                worker->node_id,
-                iteration,
-                gid,
-                propertyBuffers[worker_id][idxTracker[worker_id]],
-                worker_id);
+            // spdlog::debug(
+            //     "[Proc {}/{}] Sending GVertex/Update: {}/{} to Compute Node: {}",
+            //     worker->node_id,
+            //     iteration,
+            //     gid,
+            //     propertyBuffers[worker_id][idxTracker[worker_id]],
+            //     worker_id);
 
-            idxTracker[worker_id]++;
+            // idxTracker[worker_id]++;
+          }
+
+          for (uint32_t worker_id = 0; worker_id < num_compute; worker_id++)
+          {
+            for (auto elem : propertyMap[worker_id])
+            {
+              propertyBuffers[worker_id][idxTracker[worker_id]] = elem.second;
+              idxTracker[worker_id]++;
+            }
+
+            net.Isend(
+                worker_id,
+                0,
+                worker->bitCommVector_Send[worker_id].bitvec.data(),
+                worker->bitCommVector_Send[worker_id].size_bytes(),
+                MPI_UINT64_T,
+                &bv_requests[worker_id]);
+
+            net.Isend(
+                worker_id,
+                0,
+                propertyBuffers[worker_id].data(),
+                idxTracker[worker_id],
+                MPI_VERTEX_PROPERTY_T,
+                &data_requests[worker_id]);
           }
         }
         else
@@ -443,7 +452,7 @@ void GraphAlgorithm<VertexProperty>::run()
                   for (uint64_t j = 0; j < nVertices; j++)
                   {
                     GNode lid = offsetMatrix[j];
-                    worker->bitCommVector[worker_id].set(transTable[lid]);
+                    worker->bitCommVector_Send[worker_id].set(transTable[lid]);
                     pBuffer[offset + j] = vertex_updates[lid];
 
                     // spdlog::debug(
@@ -459,26 +468,26 @@ void GraphAlgorithm<VertexProperty>::run()
               galois::loopname("Generate Per Thread Matrix"),
               galois::no_stats(),
               galois::steal());
-        }
 
-        for (int i = 0; i < num_compute; i++)
-        {
-          // spdlog::info("[Proc {}/{}] Property Buffers: {}", this->worker->node_id, i, fmt_array(propertyBuffers[i]));
-          net.Isend(
-              worker_id,
-              0,
-              worker->bitCommVector_Send[worker_id].bitvec.data(),
-              worker->bitCommVector_Send[worker_id].size_bytes(),
-              MPI_UINT64_T,
-              &bv_requests[worker_id]);
+          for (int worker_id = 0; worker_id < num_compute; worker_id++)
+          {
+            // spdlog::info("[Proc {}/{}] Property Buffers: {}", this->worker->node_id, i, fmt_array(propertyBuffers[i]));
+            net.Isend(
+                worker_id,
+                0,
+                worker->bitCommVector_Send[worker_id].bitvec.data(),
+                worker->bitCommVector_Send[worker_id].size_bytes(),
+                MPI_UINT64_T,
+                &bv_requests[worker_id]);
 
-          net.Isend(
-              worker_id,
-              0,
-              propertyBuffers[worker_id].data(),
-              std::accumulate(perThreadVCounts[worker_id].begin(), perThreadVCounts[worker_id].end(), 0),
-              MPI_VERTEX_PROPERTY_T,
-              &data_requests[worker_id]);
+            net.Isend(
+                worker_id,
+                0,
+                propertyBuffers[worker_id].data(),
+                std::accumulate(perThreadVCounts[worker_id].begin(), perThreadVCounts[worker_id].end(), 0),
+                MPI_VERTEX_PROPERTY_T,
+                &data_requests[worker_id]);
+          }
         }
       }
       else if (ndp_decision == NO_OFFLOAD)
@@ -527,6 +536,7 @@ void GraphAlgorithm<VertexProperty>::run()
           //     fmt_array(ebuffer),
           //     gid,
           //     worker_id);
+
           net.send(worker_id, 0, ebuffer.data(), ebuffer.size(), MPI_GNODE_T);
         }
       }
@@ -537,235 +547,217 @@ void GraphAlgorithm<VertexProperty>::run()
       if (ndp_decision == NDP_OFFLOAD)
       {
         uint64_t bytes_recv = 0;
-        for (int i = 0; i < num_memory; i++)
+        auto update_worker = static_cast<UpdateWorker<VertexProperty> *>(worker);
+
+        if (switch_offload == INC_OFFLOAD)
         {
-          bytes_recv = net.Irecv(
-              i + num_compute,
-              0,
-              worker->bitCommVector[i].bitvec.data(),
-              worker->bitCommVector[i].size_bytes(),
-              MPI_UINT64_T,
-              &statuses[i],
-              &bv_requests[i]);
-
-          bytes_recv += net.Irecv(
-              i + num_compute,
-              0,
-              propertyBuffers[i].data(),
-              propertyBuffers[i].size(),
-              MPI_VERTEX_PROPERTY_T,
-              &statuses[i],
-              &data_requests[i]);
-
-          size_t bitCommVectorSize = worker->bitCommVector[i].size();
-
-          if (switch_offload == INC_OFFLOAD)
+          auto recv_data = update_worker->aggregator_worker.UpdateWorker_Recv_NDP_Offload();
+          for (int i = 0; i < recv_data.size(); i++)
           {
-            auto recv_data = update_worker->aggregator_worker.UpdateWorker_Recv_NDP_Offload();
-            for (int i = 0; i < recv_data.size(); i++)
-            {
-              size_t bitCommVectorSize = recv_data[i].first.size();
-              for (size_t j = 0; j < bitCommVectorSize; j++)
-              {
-                if (recv_data[i].first.test(j))
-                {
-                  spdlog::debug(
-                      "[Proc {}/{}] Aggregating GVertex/CurrProp/Update: {}/{}/{} from {}",
-                      worker->node_id,
-                      iteration,
-                      worker->distributed_graph->getGlobalNode(j),
-                      vertex_updates[j],
-                      recv_data[i].second[idxTracker[i]],
-                      i);
-                  GNode lid = j;
-                  worker->aggregate(*this, lid, recv_data[i].second[idxTracker[i]]);
-                  idxTracker[i]++;
-                }
-              }
-            }
-          }
-          else
-          {
+            size_t bitCommVectorSize = recv_data[i].first.size();
             for (size_t j = 0; j < bitCommVectorSize; j++)
             {
-              if (worker->bitCommVector[i].test(j))
+              if (recv_data[i].first.test(j))
               {
                 spdlog::debug(
                     "[Proc {}/{}] Aggregating GVertex/CurrProp/Update: {}/{}/{} from {}",
                     worker->node_id,
                     iteration,
-                    worker->distributed_graph->getGlobalNode(worker->rTranslationTable[i][j]),
-                    vertex_updates[worker->rTranslationTable[i][j]],
-                    propertyBuffers[i][idxTracker[i]],
+                    worker->distributed_graph->getGlobalNode(j),
+                    vertex_updates[j],
+                    recv_data[i].second[idxTracker[i]],
                     i);
-
-                //     GNode lid = worker->rTranslationTable[i][j];
-                //     worker->aggregate(*this, lid, propertyBuffers[i][idxTracker[i]]);
-                //     idxTracker[i]++;
-                //   }
-                // }
-
-                const std::vector<GNode> updated_property_vertices = worker->bitCommVector[i].getOffsets();
-                const size_t &nVertices = updated_property_vertices.size();
-                const size_t &uVerticesPerThread = 1 + ((nVertices > nGaloisThreads) ? nVertices / nGaloisThreads : 0);
-
-                galois::do_all(
-                    galois::iterate(0ul, nGaloisThreads),
-                    [&](const size_t tid)
-                    {
-                      const size_t &start = tid * uVerticesPerThread;
-                      const size_t &end =
-                          (tid + 1) * uVerticesPerThread > nVertices ? nVertices : (tid + 1) * uVerticesPerThread;
-
-                      auto &pBuffer = propertyBuffers[i];
-                      auto &transTable = worker->rTranslationTable[i];
-
-                      for (size_t j = start; j < end; j++)
-                      {
-                        GNode lid = transTable[updated_property_vertices[j]];
-                        worker->aggregate(*this, lid, pBuffer[j]);
-                      }
-                    },
-                    galois::loopname("Aggregate Property Vertices"),
-                    galois::no_stats(),
-                    galois::steal());
-
-                // spdlog::info("[Proc {}] Updated Vertices: {}", this->worker->node_id,
-                // fmt_array(updated_property_vertices));
+                GNode lid = j;
+                worker->aggregate(*this, lid, recv_data[i].second[idxTracker[i]]);
+                idxTracker[i]++;
               }
             }
-            cPhase2_timer.stop();
           }
-          else if (ndp_decision == NO_OFFLOAD)
+        }
+        else
+        {
+          for (int i = 0; i < num_memory; i++)
           {
-            // TODO: Push this to init() and only do it once
-            uint64_t max_out_degree = 0;
-            std::vector<GNode> frontier_iter = frontier.getOffsets();
-            for (const GNode lid : frontier_iter)
-            {
-              max_out_degree = std::max(max_out_degree, worker->out_degrees[lid]);
-            }
-            std::vector<GNode> ebuffer;
-            ebuffer.resize(max_out_degree + 1, 0);
+            bytes_recv = net.Irecv(
+                i + num_compute,
+                0,
+                worker->bitCommVector_Recv[i].bitvec.data(),
+                worker->bitCommVector_Recv[i].size_bytes(),
+                MPI_UINT64_T,
+                &statuses[i],
+                &bv_requests[i]);
 
-            spdlog::debug("[Proc {}] Frontier Size: {}", worker->node_id, frontier_iter.size());
+            bytes_recv += net.Irecv(
+                i + num_compute,
+                0,
+                propertyBuffers[i].data(),
+                propertyBuffers[i].size(),
+                MPI_VERTEX_PROPERTY_T,
+                &statuses[i],
+                &data_requests[i]);
 
-            for (const GNode lid : frontier_iter)
-            {
-              uint32_t worker_id = worker->getVertexMemoryPartition(lid);
+            size_t bitCommVectorSize = worker->bitCommVector_Recv[i].size();
+            const std::vector<GNode> updated_property_vertices = worker->bitCommVector_Recv[i].getOffsets();
+            const size_t &nVertices = updated_property_vertices.size();
+            const size_t &uVerticesPerThread = 1 + ((nVertices > nGaloisThreads) ? nVertices / nGaloisThreads : 0);
 
-              net.recv(worker_id + num_compute, 0, ebuffer.data(), max_out_degree + 1, MPI_GNODE_T, MPI_STATUS_IGNORE);
+            galois::do_all(
+                galois::iterate(0ul, nGaloisThreads),
+                [&](const size_t tid)
+                {
+                  const size_t &start = tid * uVerticesPerThread;
+                  const size_t &end =
+                      (tid + 1) * uVerticesPerThread > nVertices ? nVertices : (tid + 1) * uVerticesPerThread;
 
-              // spdlog::debug(
-              //     "[Proc {}/{}] Received Edges {} for Vertex {} from Memory Node: {}",
-              //     worker->node_id,
-              //     iteration,
-              //     fmt_array(ebuffer),
-              //     ebuffer[0],
-              //     worker_id);
+                  auto &pBuffer = propertyBuffers[i];
+                  auto &transTable = worker->rTranslationTable[i];
 
-              GNode src = this->worker->distributed_graph->getLocalNode(ebuffer[0]);
-              uint64_t num_edges = worker->out_degrees[src];
-
-              galois::do_all(
-                  galois::iterate(uint64_t(0), num_edges),
-                  [&](uint64_t idx)
+                  for (size_t j = start; j < end; j++)
                   {
-                    GNode l_dst = worker->distributed_graph->getLocalNode(ebuffer[idx + 1]);
+                    GNode lid = transTable[updated_property_vertices[j]];
+                    worker->aggregate(*this, lid, pBuffer[j]);
+                  }
+                },
+                galois::loopname("Aggregate Property Vertices"),
+                galois::no_stats(),
+                galois::steal());
 
-                    // spdlog::debug(
-                    //     "[Proc {}/{}] Aggregating Edge: {}/{} from Memory Node: {}",
-                    //     worker->node_id,
-                    //     iteration,
-                    //     src,
-                    //     l_dst,
-                    //     worker_id);
-
-                    // TODO: Need to Abstract this to the Graph Algorithm
-                    vertex_updates.addUpdate(l_dst, vertex_properties[src]);
-                    // vertex_updates.minUpdate(l_dst, vertex_properties[src]);
-                  },
-                  galois::loopname("Generate Updates"),
-                  galois::no_stats(),
-                  galois::steal());
-
-              ebuffer.clear();
-            }
+            // spdlog::info("[Proc {}] Updated Vertices: {}", this->worker->node_id,
+            // fmt_array(updated_property_vertices));
           }
         }
-
-        spdlog::debug("[Proc {}] Barrier 2: {}", worker->node_id, iteration);
-        // net.barrier();
-
-        if (node_type == COMPUTE_NODE)
-        {
-          // this->frontier.clear();
-          this->frontier.reset();
-
-          update_timer.start();
-          worker->update(*this);
-          update_timer.stop();
-
-          if (termination_check())
-          {
-            completion = 1;
-          }
-
-          for (uint32_t i = 0; i < num_memory; i++)
-          {
-            worker->bitCommVector_Send[i].reset();
-            worker->bitCommVector_Recv[i].reset();
-          }
-
-          idxTracker.assign(num_memory, 0);
-          vertex_updates.clear_uv();  // Clear the Updated Vertices ONLY
-        }
-        else if (node_type == MEMORY_NODE)
-        {
-          for (uint32_t i = 0; i < num_compute; i++)
-          {
-            MPI_Wait(&bv_requests[i], &statuses[i]);
-            MPI_Wait(&data_requests[i], &statuses[i]);
-
-            worker->bitCommVector_Send[i].reset();
-            worker->bitCommVector_Recv[i].reset();
-          }
-
-          idxTracker.assign(num_compute, 0);
-
-          if (clear_updates)
-          {
-            vertex_updates.clear();
-          }
-          else
-          {
-            vertex_updates.clear_uv();
-          }
-        }
-
-        vertex_properties.clear_uv();
-
-        net.allReduce(&completion, &worker_completion_count, 1, MPI_UINT32_T, MPI_SUM);
-
-        spdlog::info("[Proc {}] Iteration: {}, WCC: {}", worker->node_id, iteration++, worker_completion_count);
-        // net.barrier();
       }
-
-      timer.stop();
-
-      uint64_t total_bytes = 0;
-      uint64_t bytes = net.getBytesMoved();
-      net.allReduce(&bytes, &total_bytes, 1, MPI_UINT64_T, MPI_SUM);
-
-      if (worker->node_id == 0)
+      else if (ndp_decision == NO_OFFLOAD)
       {
-        galois::runtime::reportStat_Single(algorithm_name, "Iterations", iteration);
-        galois::runtime::reportStat_Single(algorithm_name, "TotalBytesMoved", total_bytes);
-        galois::runtime::reportStat_Single(algorithm_name, "Timer_0", timer.get());
+        // TODO: Push this to init() and only do it once
+        uint64_t max_out_degree = 0;
+        std::vector<GNode> frontier_iter = frontier.getOffsets();
+        for (const GNode lid : frontier_iter)
+        {
+          max_out_degree = std::max(max_out_degree, worker->out_degrees[lid]);
+        }
+        std::vector<GNode> ebuffer;
+        ebuffer.resize(max_out_degree + 1, 0);
+
+        spdlog::debug("[Proc {}] Frontier Size: {}", worker->node_id, frontier_iter.size());
+
+        for (const GNode lid : frontier_iter)
+        {
+          uint32_t worker_id = worker->getVertexMemoryPartition(lid);
+
+          net.recv(worker_id + num_compute, 0, ebuffer.data(), max_out_degree + 1, MPI_GNODE_T, MPI_STATUS_IGNORE);
+
+          // spdlog::debug(
+          //     "[Proc {}/{}] Received Edges {} for Vertex {} from Memory Node: {}",
+          //     worker->node_id,
+          //     iteration,
+          //     fmt_array(ebuffer),
+          //     ebuffer[0],
+          //     worker_id);
+
+          GNode src = this->worker->distributed_graph->getLocalNode(ebuffer[0]);
+          uint64_t num_edges = worker->out_degrees[src];
+
+          galois::do_all(
+              galois::iterate(uint64_t(0), num_edges),
+              [&](uint64_t idx)
+              {
+                GNode l_dst = worker->distributed_graph->getLocalNode(ebuffer[idx + 1]);
+
+                // spdlog::debug(
+                //     "[Proc {}/{}] Aggregating Edge: {}/{} from Memory Node: {}",
+                //     worker->node_id,
+                //     iteration,
+                //     src,
+                //     l_dst,
+                //     worker_id);
+
+                // TODO: Need to Abstract this to the Graph Algorithm
+                vertex_updates.addUpdate(l_dst, vertex_properties[src]);
+                // vertex_updates.minUpdate(l_dst, vertex_properties[src]);
+              },
+              galois::loopname("Generate Updates"),
+              galois::no_stats(),
+              galois::steal());
+
+          ebuffer.clear();
+        }
+      }
+      cPhase2_timer.stop();
+    }
+
+    spdlog::debug("[Proc {}] Barrier 2: {}", worker->node_id, iteration);
+    // net.barrier();
+
+    if (node_type == COMPUTE_NODE)
+    {
+      // this->frontier.clear();
+      this->frontier.reset();
+
+      update_timer.start();
+      worker->update(*this);
+      update_timer.stop();
+
+      if (termination_check())
+      {
+        completion = 1;
       }
 
-      galois::runtime::reportStat_Single(algorithm_name, "TraversalTimer", traversal_timer.get());
-      galois::runtime::reportStat_Single(algorithm_name, "UpdateTimer", update_timer.get());
-      galois::runtime::reportStat_Single(algorithm_name, "CPhase1Timer", cPhase1_timer.get());
-      galois::runtime::reportStat_Single(algorithm_name, "CPhase2Timer", cPhase2_timer.get());
+      for (uint32_t i = 0; i < num_memory; i++)
+      {
+        worker->bitCommVector_Send[i].reset();
+        worker->bitCommVector_Recv[i].reset();
+      }
+
+      idxTracker.assign(num_memory, 0);
+      vertex_updates.clear_uv();  // Clear the Updated Vertices ONLY
     }
+    else if (node_type == MEMORY_NODE)
+    {
+      for (uint32_t i = 0; i < num_compute; i++)
+      {
+        MPI_Wait(&bv_requests[i], &statuses[i]);
+        MPI_Wait(&data_requests[i], &statuses[i]);
+
+        worker->bitCommVector_Send[i].reset();
+        worker->bitCommVector_Recv[i].reset();
+      }
+
+      idxTracker.assign(num_compute, 0);
+
+      if (clear_updates)
+      {
+        vertex_updates.clear();
+      }
+      else
+      {
+        vertex_updates.clear_uv();
+      }
+    }
+
+    vertex_properties.clear_uv();
+
+    net.allReduce(&completion, &worker_completion_count, 1, MPI_UINT32_T, MPI_SUM);
+
+    spdlog::info("[Proc {}] Iteration: {}, WCC: {}", worker->node_id, iteration++, worker_completion_count);
+    // net.barrier();
+  }
+
+  timer.stop();
+
+  uint64_t total_bytes = 0;
+  uint64_t bytes = net.getBytesMoved();
+  net.allReduce(&bytes, &total_bytes, 1, MPI_UINT64_T, MPI_SUM);
+
+  if (worker->node_id == 0)
+  {
+    galois::runtime::reportStat_Single(algorithm_name, "Iterations", iteration);
+    galois::runtime::reportStat_Single(algorithm_name, "TotalBytesMoved", total_bytes);
+    galois::runtime::reportStat_Single(algorithm_name, "Timer_0", timer.get());
+  }
+
+  galois::runtime::reportStat_Single(algorithm_name, "TraversalTimer", traversal_timer.get());
+  galois::runtime::reportStat_Single(algorithm_name, "UpdateTimer", update_timer.get());
+  galois::runtime::reportStat_Single(algorithm_name, "CPhase1Timer", cPhase1_timer.get());
+  galois::runtime::reportStat_Single(algorithm_name, "CPhase2Timer", cPhase2_timer.get());
+}
