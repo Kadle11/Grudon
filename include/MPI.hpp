@@ -45,7 +45,7 @@ class MPICore
     return MPI_Send(buf, count, datatype, dest, tag, MPI_COMM_WORLD);
   }
 
-  uint64_t recv(int source, int tag, void* buf, int count, MPI_Datatype datatype, MPI_Status* status)
+  uint64_t recv(int source, int tag, void* buf, int count, MPI_Datatype datatype, MPI_Status* status = NULL)
   {
     MPI_Recv(buf, count, datatype, source, tag, MPI_COMM_WORLD, &local_status);
     MPI_Get_count(&local_status, datatype, &local_count);

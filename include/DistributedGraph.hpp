@@ -291,4 +291,7 @@ class DistributedGraph
   galois::LargeArray<uint64_t>& out_degrees;
 };
 
+
+double calculateSkew(std::vector<GNode>& frontier, uint32_t& num_memory, DistributedGraph& distributed_graph);
+
 #endif

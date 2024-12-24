@@ -950,3 +950,52 @@ void DistributedGraph::printState()
     }
   }
 }
+
+
+double calculateSkew(std::vector<GNode>& frontier, uint32_t& num_memory, DistributedGraph& distributed_graph)
+{
+  std::vector<galois::GAccumulator<uint64_t>> mirrorCoverage(num_memory);
+  for (auto& mc : mirrorCoverage)
+  {
+    mc.reset();
+  }
+
+  galois::do_all(
+      galois::iterate(frontier.begin(), frontier.end()),
+      [&](const GNode& lid)
+      {
+        GNode gid = distributed_graph.getGlobalNode(lid);
+        uint32_t worker_id = distributed_graph.getMirrorPartition(gid);
+
+        mirrorCoverage[worker_id] += 1;
+      },
+      galois::loopname("Mirror Coverage"),
+      galois::no_stats(),
+      galois::steal());
+
+  std::vector<uint64_t> mirrorCoverageVector;
+  mirrorCoverageVector.reserve(num_memory);
+  for (auto& mc : mirrorCoverage)
+  {
+    mirrorCoverageVector.push_back(mc.reduce());
+  }
+
+  double avgMirrorCoverage = std::accumulate(mirrorCoverageVector.begin(), mirrorCoverageVector.end(), 0) / num_memory;
+  double variance = std::accumulate(
+      mirrorCoverageVector.begin(),
+      mirrorCoverageVector.end(),
+      0,
+      [&](double a, uint64_t b) { return a + std::pow(b - avgMirrorCoverage, 2); });
+
+  double stddev = std::sqrt(variance / num_memory);
+
+  double skewness = std::accumulate(
+      mirrorCoverageVector.begin(),
+      mirrorCoverageVector.end(),
+      0,
+      [&](double a, uint64_t b) { return a + std::pow((b - avgMirrorCoverage), 3); });
+
+  skewness /= (num_memory * std::pow(stddev, 3));
+
+  return skewness;
+}

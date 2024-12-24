@@ -5,11 +5,12 @@
 set -e # Exit on error
 set -x # Print commands
 
-GALOIS_HOME="/nethome/vrao79/Galois/build/lonestardist"
+GALOIS_HOME="/nethome/vrao79/Groudon/extern/Galois/build/lonestar/analytics/distributed"
 GROUDON_HOME="/nethome/vrao79/Groudon"
 GROUDON_BIN="$GROUDON_HOME/build/bin/Debug/Groudon"
-LOG_DIR="$GROUDON_HOME/logs"
-PARTITIONS_DIR="/netscratch/vrao79/galois-graphs/partitions"
+LOG_DIR="$GROUDON_HOME/logs/dm_runs"
+PARTITIONS_DIR="/nethome/vrao79/galois-graphs/"
+
 
 GRAPH_PATH=$1
 ALGORITHM=$2
@@ -37,22 +38,22 @@ GALOIS_BIN=""
 if [ "$ALGORITHM" == "bfs" ]
 then
 
-GALOIS_BIN="$GALOIS_HOME/bfs/bfs_push"
+GALOIS_BIN="$GALOIS_HOME/bfs/bfs-push-dist"
 
 elif [ "$ALGORITHM" == "sssp" ]
 then
 
-GALOIS_BIN="$GALOIS_HOME/sssp/sssp_push"
+GALOIS_BIN="$GALOIS_HOME/sssp/sssp-push-dist"
 
 elif [ "$ALGORITHM" == "pr" ]
 then
 
-GALOIS_BIN="$GALOIS_HOME/pagerank/pagerank_push"
+GALOIS_BIN="$GALOIS_HOME/pagerank/pagerank-push-dist"
 
 elif [ "$ALGORITHM" == "cc" ]
 then
 
-GALOIS_BIN="$GALOIS_HOME/cc/cc_push"
+GALOIS_BIN="$GALOIS_HOME/connected-components/connected-components-push-dist"
 
 fi
 
@@ -73,7 +74,7 @@ for i in {2..8}
 do
     echo "Running Galois with $i partitions"
     LOG_FILE=$LOG_DIR/Gluon-$GRAPH_NAME-$ALGORITHM-1C"$i"M5T.log
-    OUTPUT=$(GALOIS_DO_NOT_BIND_THREADS=1 time mpirun -n $i --npersocket 1 --map-by NUMA:PE=10 --use-hwthread-cpus --report-bindings $GALOIS_BIN -exec=Sync -runs=1 $GRAPH_PATH -t=20 2>&1 | tee $LOG_FILE)
+    OUTPUT=$(GALOIS_DO_NOT_BIND_THREADS=1 time mpirun -n $i --npersocket 1 --map-by NUMA:PE=10 --use-hwthread-cpus --report-bindings $GALOIS_BIN -exec=Sync -runs=1 --maxIterations=20 $GRAPH_PATH -t=20 2>&1 | tee $LOG_FILE)
 done
 
 # Run Groudon
@@ -83,13 +84,13 @@ do
     LOG_FILE=$LOG_DIR/Groudon-$GRAPH_NAME-$ALGORITHM-1C"$i"M5T.log
     PARTITIONS_FILE=$PARTITIONS_DIR/$GRAPH_NAME."$i"parts
     TOTAL_PARTS=$((i + 1))
-    OUTPUT=$(GALOIS_DO_NOT_BIND_THREADS=1 time mpirun -n $TOTAL_PARTS --npersocket 1 --map-by NUMA:PE=7 --use-hwthread-cpus --report-bindings $GROUDON_BIN -g $GRAPH_PATH -c 1 -m $i -t 20 -p $PARTITIONS_FILE 2>&1 | tee $LOG_FILE)
+    OUTPUT=$(GALOIS_DO_NOT_BIND_THREADS=1 time mpirun -n $TOTAL_PARTS --npersocket 1 --map-by NUMA:PE=5 --use-hwthread-cpus --report-bindings $GROUDON_BIN -g $GRAPH_PATH -c 1 -m $i -t 20 -a pr 2>&1 | tee $LOG_FILE)
 done
 
 # Run ~GraphQ
-for i in {2..8}
-do
-    echo "Running Galois with $i partitions"
-    LOG_FILE=$LOG_DIR/GraphQ-$GRAPH_NAME-$ALGORITHM-1C"$i"M5T.log
-    OUTPUT=$(GALOIS_DO_NOT_BIND_THREADS=1 time mpirun -n $i --npersocket 1 --map-by NUMA:PE=10 --use-hwthread-cpus --report-bindings $GALOIS_BIN $GRAPH_PATH -partitionAgnostic -metadata=none -exec=Sync -runs=1 -t=20 2>&1 | tee $LOG_FILE)
-done
+# for i in {2..8}
+# do
+#     echo "Running Galois with $i partitions"
+#     LOG_FILE=$LOG_DIR/GraphQ-$GRAPH_NAME-$ALGORITHM-1C"$i"M5T.log
+#     OUTPUT=$(GALOIS_DO_NOT_BIND_THREADS=1 time mpirun -n $i --npersocket 1 --map-by NUMA:PE=10 --use-hwthread-cpus --report-bindings $GALOIS_BIN $GRAPH_PATH -partitionAgnostic -metadata=none -exec=Sync -runs=1 -t=20 2>&1 | tee $LOG_FILE)
+# done

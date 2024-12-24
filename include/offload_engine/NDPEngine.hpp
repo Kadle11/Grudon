@@ -1,6 +1,8 @@
 #ifndef NDP_ENGINE_HPP
 #define NDP_ENGINE_HPP
 
+#include <execution>
+
 #include "DistributedGraph.hpp"
 #include "GraphAlgorithm.hpp"
 #include "Logger.hpp"
@@ -8,39 +10,28 @@
 // TODO: Are Galois Primitives faster than Std Primitives?
 
 OFFLOAD_DECISION NDPEngine(
-    galois::DynamicBitSet& frontier,
+    std::vector<GNode>& frontier,
     galois::LargeArray<bool>& coverage_vector,
     size_t& offload_threshold,
     DistributedGraph& distributed_graph,
     uint32_t& num_memory)
 {
-  std::vector<GNode> frontier_iter = frontier.getOffsets();
-  if (frontier_iter.size() == 0 | frontier_iter.size() > offload_threshold)
+  if (frontier.size() == 0 | frontier.size() > offload_threshold)
   {
     return NDP_OFFLOAD;
   }
 
-  if (!std::all_of(frontier_iter.begin(), frontier_iter.end(), [&](GNode v) { return coverage_vector[v]; }))
+  if (!std::all_of(
+          std::execution::par,
+          frontier.begin(),
+          frontier.end(),
+          [&](const GNode& lid) { return coverage_vector[lid]; }))
   {
     return NDP_OFFLOAD;
   }
 
-  std::vector<uint64_t> mirrorCoverage(num_memory, 0);
-
-  for (const GNode lid : frontier_iter)
-  {
-    GNode gid = distributed_graph.getGlobalNode(lid);
-    uint32_t worker_id = distributed_graph.getMirrorPartition(gid);
-
-    mirrorCoverage[worker_id]++;
-  }
-
-  uint64_t maxMirrorCoverage = *std::max_element(mirrorCoverage.begin(), mirrorCoverage.end());
-  uint64_t totalMirrorCoverage = std::accumulate(mirrorCoverage.begin(), mirrorCoverage.end(), 0);
-  uint64_t memory_nodes_touched =
-      std::count_if(mirrorCoverage.begin(), mirrorCoverage.end(), [](uint64_t v) { return v > 0; });
-
-  if (memory_nodes_touched == 0 || maxMirrorCoverage < (totalMirrorCoverage / memory_nodes_touched))
+  double skewness = calculateSkew(frontier, num_memory, distributed_graph);
+  if (skewness > 0.5 || skewness < -0.5)
   {
     return NDP_OFFLOAD;
   }
