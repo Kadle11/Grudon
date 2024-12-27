@@ -44,7 +44,7 @@ class GraphAlgorithm
   virtual void printState() = 0;
   virtual void verify() = 0;
 
-  void run();
+  void run(uint32_t& offload_mode);
 
  protected:
   std::string algorithm_name;

@@ -159,12 +159,16 @@ GraphAlgorithm<VertexProperty>::GraphAlgorithm(
 }
 
 template<typename VertexProperty>
-void GraphAlgorithm<VertexProperty>::run()
+void GraphAlgorithm<VertexProperty>::run(uint32_t &offload_mode)
 {
   std::vector<uint32_t> idxTracker;
   std::vector<MPI_Request> bv_requests;
   std::vector<MPI_Request> data_requests;
   std::vector<MPI_Status> statuses;
+
+  galois::DynamicBitSet unique_neighbors;
+  size_t sbvSize = 0;
+  size_t rbvSize = 0;
 
   double skewness = 0.0;
 
@@ -174,6 +178,12 @@ void GraphAlgorithm<VertexProperty>::run()
     bv_requests = std::vector<MPI_Request>(num_memory);
     data_requests = std::vector<MPI_Request>(num_memory);
     statuses = std::vector<MPI_Status>(num_memory);
+
+    for (int i = 0; i < num_memory; i++)
+    {
+      sbvSize += worker->bitCommVector_Send[i].size_bytes() * sizeof(uint64_t);
+      rbvSize += worker->bitCommVector_Recv[i].size_bytes() * sizeof(uint64_t);
+    }
   }
   else if (node_type == MEMORY_NODE)
   {
@@ -181,14 +191,28 @@ void GraphAlgorithm<VertexProperty>::run()
     bv_requests = std::vector<MPI_Request>(num_compute);
     data_requests = std::vector<MPI_Request>(num_compute);
     statuses = std::vector<MPI_Status>(num_compute);
+
+    unique_neighbors.resize(worker->num_vertices);
   }
 
   uint32_t completion = 0;
   OFFLOAD_DECISION memory_offload = NO_OFFLOAD;
   OFFLOAD_DECISION switch_offload = NO_OFFLOAD;
+  OFFLOAD_DECISION init_decision = (offload_mode == 0) ? NDP_OFFLOAD : NO_OFFLOAD;
   uint32_t iteration = 0;
-  size_t ndp_offload_threshold = worker->total_vertices / 10;
-  uint64_t inc_offload_threshold = std::accumulate(worker->out_degrees.begin(), worker->out_degrees.end(), 0) / 20;
+  size_t VertexProperty_size = sizeof(VertexProperty);
+
+  size_t ndp_offload_threshold =
+      (worker->total_vertices / 10) * (VertexProperty_size / sizeof(GNode)) * this->distributed_graph->replication_factor;
+  uint64_t inc_offload_threshold = std::accumulate(worker->out_degrees.begin(), worker->out_degrees.end(), 0) / 10;
+
+  uint64_t frontier_size = 0;
+  uint64_t neighbor_count = 0;
+  uint64_t unique_neighbor_count = 0;
+  uint64_t uNeighbors = 0;
+  double offload_coeff = 0.0;
+  double fetch_coeff = 0.0;
+  double decision_coeff = 0.0;
 
   net.barrier();
 
@@ -202,22 +226,40 @@ void GraphAlgorithm<VertexProperty>::run()
 
   timer.start();
 
+  uint64_t curr_bytes_moved = 0;
+  uint64_t prev_bytes_moved = 0;
+
   while (worker_completion_count != num_compute && iteration < MAX_ITERATIONS)
   {
-    memory_offload = NO_OFFLOAD;
+    memory_offload = init_decision;
     switch_offload = NO_OFFLOAD;
-    ndp_decision = NO_OFFLOAD;
+    ndp_decision = init_decision;
     inc_decision = NO_OFFLOAD;
 
     worker_completion_count = 0;
     completion = 0;
+    uNeighbors = 0;
+    neighbor_count = 0;
 
     if (node_type == COMPUTE_NODE)
     {
       current_frontier = this->frontier.getOffsets();
 
-      // memory_offload = NDPEngine(
-      //     current_frontier, worker->coverage_vector, ndp_offload_threshold, *worker->distributed_graph, num_memory);
+      if (offload_mode != 2)
+      {
+        memory_offload = NDPEngine(
+            current_frontier,
+            worker->coverage_vector,
+            worker->out_degrees,
+            ndp_offload_threshold,
+            num_memory,
+            num_compute,
+            offload_coeff,
+            fetch_coeff,
+            decision_coeff,
+            neighbor_count,
+            frontier_size);
+      }
 
       // if (memory_offload == NDP_OFFLOAD)
       // {
@@ -616,10 +658,43 @@ void GraphAlgorithm<VertexProperty>::run()
             {
               const size_t &start = tid * uVerticesPerThread;
               const size_t &end = (tid + 1) * uVerticesPerThread > nVertices ? nVertices : (tid + 1) * uVerticesPerThread;
-              std::vector<GNode> eBuffer;
+              std::vector<std::vector<GNode>> eBuffer(2, std::vector<GNode>());
+              std::vector<MPI_Request> buf_requests(2);
+              std::vector<MPI_Status> buf_statuses(2);
 
-              for (size_t j = start; j < end; j++)
+              if (start >= end)
               {
+                return;
+              }
+
+              uint32_t currBuf = start % 2;
+              uint32_t prevBuf = 0;
+              GNode &lid = updated_vertices[start];
+              uint32_t worker_id = this->worker->getVertexComputePartition(lid);
+
+              auto ii = this->worker->distributed_graph->lgraph.edge_begin(lid);
+              auto ei = this->worker->distributed_graph->lgraph.edge_end(lid);
+              uint64_t num_edges = std::distance(ii, ei);
+
+              eBuffer[currBuf].resize(num_edges + 1);
+              eBuffer[currBuf][0] = this->worker->distributed_graph->getGlobalNode(lid);
+              memcpy(
+                  eBuffer[currBuf].data() + 1,
+                  &this->worker->distributed_graph->lgraph.edgeDst[*ii],
+                  num_edges * sizeof(GNode));
+
+              for (size_t k = 1; k < num_edges + 1; k++)
+              {
+                unique_neighbors.set(eBuffer[currBuf][k]);
+                eBuffer[currBuf][k] = this->worker->distributed_graph->getGlobalNode(eBuffer[currBuf][k]);
+              }
+
+              net.Isend(worker_id, 0, eBuffer[currBuf].data(), eBuffer[currBuf].size(), MPI_GNODE_T, &buf_requests[currBuf]);
+
+              for (size_t j = start + 1; j < end; j++)
+              {
+                prevBuf = currBuf;
+                currBuf = (prevBuf + 1) % 2;
                 GNode &lid = updated_vertices[j];
                 uint32_t worker_id = this->worker->getVertexComputePartition(lid);
 
@@ -627,22 +702,36 @@ void GraphAlgorithm<VertexProperty>::run()
                 auto ei = this->worker->distributed_graph->lgraph.edge_end(lid);
                 uint64_t num_edges = std::distance(ii, ei);
 
-                eBuffer.resize(num_edges + 1);
-                eBuffer[0] = this->worker->distributed_graph->getGlobalNode(lid);
-                memcpy(eBuffer.data() + 1, &this->worker->distributed_graph->lgraph.edgeDst[*ii], num_edges * sizeof(GNode));
+                eBuffer[currBuf].resize(num_edges + 1);
+                eBuffer[currBuf][0] = this->worker->distributed_graph->getGlobalNode(lid);
+                memcpy(
+                    eBuffer[currBuf].data() + 1,
+                    &this->worker->distributed_graph->lgraph.edgeDst[*ii],
+                    num_edges * sizeof(GNode));
 
                 for (size_t k = 1; k < num_edges + 1; k++)
                 {
-                  eBuffer[k] = this->worker->distributed_graph->getGlobalNode(eBuffer[k]);
+                  unique_neighbors.set(eBuffer[currBuf][k]);
+                  eBuffer[currBuf][k] = this->worker->distributed_graph->getGlobalNode(eBuffer[currBuf][k]);
                 }
 
-                net.send(worker_id, 0, eBuffer.data(), num_edges + 1, MPI_GNODE_T);
-                eBuffer.clear();
+                net.Isend(
+                    worker_id, 0, eBuffer[currBuf].data(), eBuffer[currBuf].size(), MPI_GNODE_T, &buf_requests[currBuf]);
+                MPI_Wait(&buf_requests[prevBuf], &buf_statuses[prevBuf]);
+                eBuffer[prevBuf].clear();
               }
+
+              MPI_Wait(&buf_requests[currBuf], &buf_statuses[currBuf]);
+              eBuffer[currBuf].clear();
             },
             galois::loopname("Generate BitCommVector"),
             galois::no_stats(),
             galois::steal());
+
+        // All Reduce Unique Neighbors
+        unique_neighbor_count = unique_neighbors.count();
+        net.allReduce(&unique_neighbor_count, &uNeighbors, 1, MPI_UINT64_T, MPI_SUM);
+        unique_neighbors.reset();
       }
     }
     else if (node_type == COMPUTE_NODE)
@@ -704,6 +793,8 @@ void GraphAlgorithm<VertexProperty>::run()
             const std::vector<GNode> updated_property_vertices = worker->bitCommVector_Recv[i].getOffsets();
             const size_t &nVertices = updated_property_vertices.size();
             const size_t &uVerticesPerThread = 1 + ((nVertices > nGaloisThreads) ? nVertices / nGaloisThreads : 0);
+
+            uNeighbors += nVertices;
 
             galois::do_all(
                 galois::iterate(0ul, nGaloisThreads),
@@ -798,25 +889,39 @@ void GraphAlgorithm<VertexProperty>::run()
               const size_t &end = (tid + 1) * uVerticesPerThread > nVertices ? nVertices : (tid + 1) * uVerticesPerThread;
               std::vector<GNode> eBuffer(max_out_degree + 1);
 
+              std::vector<MPI_Request> buf_requests(num_memory);
+              std::vector<MPI_Status> buf_statuses(num_memory);
+
               for (size_t j = start; j < end; j++)
               {
                 GNode &lid = frontier_iter[j];
                 uint32_t worker_id = this->worker->getVertexMemoryPartition(lid);
 
-                net.recv(worker_id + num_compute, 0, eBuffer.data(), max_out_degree + 1, MPI_GNODE_T, MPI_STATUS_IGNORE);
+                net.Irecv(
+                    worker_id + num_compute,
+                    0,
+                    eBuffer.data(),
+                    max_out_degree + 1,
+                    MPI_GNODE_T,
+                    &buf_statuses[worker_id],
+                    &buf_requests[worker_id]);
 
                 GNode src = this->worker->distributed_graph->getLocalNode(eBuffer[0]);
 
-                for (size_t k = 1; k <  worker->out_degrees[src] + 1; k++)
+                for (size_t k = 1; k < worker->out_degrees[src] + 1; k++)
                 {
                   GNode l_dst = worker->distributed_graph->getLocalNode(eBuffer[k]);
                   vertex_updates.addUpdate(l_dst, vertex_properties[src]);
+                  // vertex_updates.minUpdate(l_dst, vertex_properties[src]);
                 }
               }
             },
             galois::loopname("Generate BitCommVector"),
             galois::no_stats(),
             galois::steal());
+
+        // All Reduce Unique Neighbors
+        net.allReduce(&unique_neighbor_count, &uNeighbors, 1, MPI_UINT64_T, MPI_SUM);
       }
       cPhase2_timer.stop();
     }
@@ -826,7 +931,6 @@ void GraphAlgorithm<VertexProperty>::run()
 
     if (node_type == COMPUTE_NODE)
     {
-      // this->frontier.clear();
       this->frontier.reset();
 
       update_timer.start();
@@ -836,6 +940,28 @@ void GraphAlgorithm<VertexProperty>::run()
       if (termination_check())
       {
         completion = 1;
+      }
+
+      if (neighbor_count != 0)
+      {
+        uint64_t fetchDM = (neighbor_count + frontier_size) * sizeof(GNode) + sbvSize;
+        uint64_t offloadDM = (uNeighbors + frontier_size) * VertexProperty_size + rbvSize + sbvSize;
+
+        if (ndp_decision == NDP_OFFLOAD && fetchDM < offloadDM)
+        {
+          fetch_coeff = (offloadDM - fetchDM) / (double)offloadDM;
+          offload_coeff = 0.0;
+        }
+        else if (ndp_decision == NO_OFFLOAD && fetchDM > offloadDM)
+        {
+          offload_coeff = (fetchDM - offloadDM) / (double)fetchDM;
+          fetch_coeff = 0.0;
+        }
+        else
+        {
+          fetch_coeff = 0.0;
+          offload_coeff = 0.0;
+        }
       }
 
       for (uint32_t i = 0; i < num_memory; i++)
@@ -878,8 +1004,12 @@ void GraphAlgorithm<VertexProperty>::run()
 
     net.allReduce(&completion, &worker_completion_count, 1, MPI_UINT32_T, MPI_SUM);
 
-    spdlog::info("[Proc {}] Iteration: {}, WCC: {}", worker->node_id, iteration++, worker_completion_count);
-    // net.barrier();
+    // spdlog::info("[Proc {}] Iteration: {}, WCC: {}", worker->node_id, iteration++, worker_completion_count);
+
+    curr_bytes_moved = net.getBytesMoved();
+    spdlog::info(
+        "[Proc {}] Iteration: {}, Bytes Moved: {}", worker->node_id, iteration++, curr_bytes_moved - prev_bytes_moved);
+    prev_bytes_moved = curr_bytes_moved;
   }
 
   timer.stop();

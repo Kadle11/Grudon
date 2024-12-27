@@ -12,31 +12,53 @@
 OFFLOAD_DECISION NDPEngine(
     std::vector<GNode>& frontier,
     galois::LargeArray<bool>& coverage_vector,
+    galois::LargeArray<uint64_t>& out_degrees,
     size_t& offload_threshold,
-    DistributedGraph& distributed_graph,
-    uint32_t& num_memory)
+    uint32_t& num_memory,
+    uint32_t& num_compute,
+    double& offload_coeff,
+    double& fetch_coeff,
+    double& decision_coeff,
+    uint64_t& neighbor_count,
+    uint64_t& frontier_size)
 {
-  if (frontier.size() == 0 | frontier.size() > offload_threshold)
+  frontier_size = frontier.size();
+  if (frontier_size == 0 | frontier_size > offload_threshold)
   {
     return NDP_OFFLOAD;
   }
 
-  if (!std::all_of(
-          std::execution::par,
-          frontier.begin(),
-          frontier.end(),
-          [&](const GNode& lid) { return coverage_vector[lid]; }))
+  if (num_compute > 1 &&
+      !std::all_of(
+          std::execution::par, frontier.begin(), frontier.end(), [&](const GNode& lid) { return coverage_vector[lid]; }))
   {
     return NDP_OFFLOAD;
   }
 
-  double skewness = calculateSkew(frontier, num_memory, distributed_graph);
-  if (skewness > 0.5 || skewness < -0.5)
+  galois::GAccumulator<uint64_t> neighbor_accum;
+  neighbor_accum.reset();
+  galois::do_all(
+      galois::iterate(frontier.begin(), frontier.end()),
+      [&](const GNode& lid) { neighbor_accum += out_degrees[lid]; },
+      galois::loopname("Calculate Neighbor Accumulator"),
+      galois::no_stats(),
+      galois::steal());
+
+  neighbor_count = neighbor_accum.reduce();
+
+  decision_coeff += 0.7 * offload_coeff - 0.5 * fetch_coeff;
+  
+  spdlog::info(
+      "[Proc 0] Frontier Size: {}, Decision Coefficient: {}/{}/{}",
+      frontier_size,
+      decision_coeff,
+      offload_coeff,
+      fetch_coeff);
+
+  if (decision_coeff >= -1.5)
   {
     return NDP_OFFLOAD;
   }
-
-  spdlog::info("No Offload, Frontier Size: {}", frontier.size());
 
   return NO_OFFLOAD;
 }

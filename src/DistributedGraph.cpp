@@ -52,6 +52,8 @@ DistributedGraph::DistributedGraph(
     // Read the Graph
     galois::graphs::readGraph(bgraph, graph_path);
 
+    avg_degree = bgraph.sizeEdges() / bgraph.size();
+
     spdlog::info("Read {} nodes and {} edges", bgraph.size(), bgraph.sizeEdges());
 
     // Partition the Graph
@@ -453,10 +455,8 @@ DistributedGraph::DistributedGraph(
     new_master_partition.deallocate();
     new_mirror_partition.deallocate();
 
-    galois::runtime::reportStat_Single(
-        "Partitioning Scheme",
-        "Replication Factor",
-        float(total_cross_node_mirrors.reduce() + bgraph.size()) / bgraph.size());
+    replication_factor = float(total_cross_node_mirrors.reduce() + bgraph.size()) / bgraph.size();
+    galois::runtime::reportStat_Single("Partitioning Scheme", "Replication Factor", replication_factor);
   }
   else
   {
@@ -683,7 +683,7 @@ DistributedGraph::DistributedGraph(
       }
       aggrAddrTranslationTableIdxs[masterID]++;
     }
-    
+
     for (int i = 0; i < num_compute; i++)
     {
       assert(addrTranslationTableIdxs[i] == translationTableSizes[i]);
@@ -951,7 +951,6 @@ void DistributedGraph::printState()
   }
 }
 
-
 double calculateSkew(std::vector<GNode>& frontier, uint32_t& num_memory, DistributedGraph& distributed_graph)
 {
   std::vector<galois::GAccumulator<uint64_t>> mirrorCoverage(num_memory);
@@ -994,6 +993,11 @@ double calculateSkew(std::vector<GNode>& frontier, uint32_t& num_memory, Distrib
       mirrorCoverageVector.end(),
       0,
       [&](double a, uint64_t b) { return a + std::pow((b - avgMirrorCoverage), 3); });
+
+  if (stddev == 0)
+  {
+    return 0;
+  }
 
   skewness /= (num_memory * std::pow(stddev, 3));
 

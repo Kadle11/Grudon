@@ -270,6 +270,8 @@ class DistributedGraph
   uint64_t& num_edges;
   uint32_t& node_id;
   NODE_TYPE& node_type;
+  double replication_factor;
+  double avg_degree;
 
   // TODO: Make sure these are structures only required for initialization
   galois::LargeArray<GNode> mirror_partition;

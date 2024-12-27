@@ -70,7 +70,7 @@ cd $EMULATION_SCRIPTS
 sudo ./dist_model.sh
 
 cd $RUN_SCRIPTS_DIR
-for i in {1..2}; 
+for i in {1..5}; 
 do
 
     LOG_SUFFIX=Gluon_"$GRAPH_NAME"_3N_run$i.log
@@ -86,7 +86,7 @@ cd $EMULATION_SCRIPTS
 sudo ./distNDP_model.sh
 
 cd $RUN_SCRIPTS_DIR
-for i in {1..2}; 
+for i in {1..3}; 
 do 
     LOG_SUFFIX=GraphQOpt_"$GRAPH_NAME"_3N_run$i.log
     reset_hugepage_allocation
@@ -103,26 +103,26 @@ sudo ./disagg_NDP.sh
 cd $RUN_SCRIPTS_DIR
 # Check if the partition file exists
 if [ ! -f $PARTITION_PATH ]; then
-    for i in {1..2}; 
+    for i in {1..3}; 
     do
         LOG_SUFFIX=Groudon_"$GRAPH_NAME"_3N_run$i.log 
         reset_hugepage_allocation
         GALOIS_DO_NOT_BIND_THREADS=1 time mpirun -n 4 --rankfile $RUN_SCRIPTS_DIR/groudon_proc_map --use-hwthread-cpus --report-bindings $GROUDON_BIN -g $GRAPH_PATH -c 1 -m 3 -t $MEMORY_NODE_LCORES -a pr 2>&1 | tee $LOG_DIR/pr_$LOG_SUFFIX;
         # reset_hugepage_allocation
         # GALOIS_DO_NOT_BIND_THREADS=1 time mpirun -n 4 --rankfile $RUN_SCRIPTS_DIR/groudon_proc_map --use-hwthread-cpus --report-bindings $GROUDON_BIN -g $SYM_GRAPH_PATH -c 1 -m 3 -t $MEMORY_NODE_LCORES -a cc  2>&1 | tee $LOG_DIR/cc_$LOG_SUFFIX;
-        reset_hugepage_allocation
-        GALOIS_DO_NOT_BIND_THREADS=1 time mpirun -n 4 --rankfile $RUN_SCRIPTS_DIR/groudon_proc_map --use-hwthread-cpus --report-bindings $GROUDON_BIN -g $GRAPH_PATH -c 1 -m 3 -t $MEMORY_NODE_LCORES -a sssp 2>&1 | tee $LOG_DIR/sssp_$LOG_SUFFIX;
+        # reset_hugepage_allocation
+        # GALOIS_DO_NOT_BIND_THREADS=1 time mpirun -n 4 --rankfile $RUN_SCRIPTS_DIR/groudon_proc_map --use-hwthread-cpus --report-bindings $GROUDON_BIN -g $GRAPH_PATH -c 1 -m 3 -t $MEMORY_NODE_LCORES -a sssp 2>&1 | tee $LOG_DIR/sssp_$LOG_SUFFIX;
     done
 else
-    for i in {1..2}; 
+    for i in {1..3}; 
     do
         LOG_SUFFIX=Groudon_"$GRAPH_NAME"_3N_run$i.log 
         reset_hugepage_allocation
         GALOIS_DO_NOT_BIND_THREADS=1 time mpirun -n 4 --rankfile $RUN_SCRIPTS_DIR/groudon_proc_map --use-hwthread-cpus --report-bindings $GROUDON_BIN -g $GRAPH_PATH -c 1 -m 3 -t $MEMORY_NODE_LCORES -a pr -p $PARTITION_PATH 2>&1 | tee $LOG_DIR/pr_$LOG_SUFFIX;
         # reset_hugepage_allocation
         # GALOIS_DO_NOT_BIND_THREADS=1 time mpirun -n 4 --rankfile $RUN_SCRIPTS_DIR/groudon_proc_map --use-hwthread-cpus --report-bindings $GROUDON_BIN -g $SYM_GRAPH_PATH -c 1 -m 3 -t $MEMORY_NODE_LCORES -a cc -p $PARTITION_PATH 2>&1 | tee $LOG_DIR/cc_$LOG_SUFFIX;
-        reset_hugepage_allocation
-        GALOIS_DO_NOT_BIND_THREADS=1 time mpirun -n 4 --rankfile $RUN_SCRIPTS_DIR/groudon_proc_map --use-hwthread-cpus --report-bindings $GROUDON_BIN -g $GRAPH_PATH -c 1 -m 3 -t $MEMORY_NODE_LCORES -a sssp -p $PARTITION_PATH 2>&1 | tee $LOG_DIR/sssp_$LOG_SUFFIX;
+        # reset_hugepage_allocation
+        # GALOIS_DO_NOT_BIND_THREADS=1 time mpirun -n 4 --rankfile $RUN_SCRIPTS_DIR/groudon_proc_map --use-hwthread-cpus --report-bindings $GROUDON_BIN -g $GRAPH_PATH -c 1 -m 3 -t $MEMORY_NODE_LCORES -a sssp -p $PARTITION_PATH 2>&1 | tee $LOG_DIR/sssp_$LOG_SUFFIX;
     done
 fi
 

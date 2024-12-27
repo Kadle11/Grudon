@@ -20,9 +20,14 @@ OFFLOAD_DECISION INCEngine(
     offload_factor += out_degrees[distributed_graph.getGlobalNode(lid)];
   }
 
+  if (offload_factor < offload_threshold)
+  {
+    return NO_OFFLOAD;
+  }
+
   double skewness = calculateSkew(frontier, num_memory, distributed_graph);
 
-  if (offload_factor > offload_threshold && (skewness > -1 && skewness < 1))
+  if (skewness > -1 && skewness < 1)
   {
     return INC_OFFLOAD;
   }

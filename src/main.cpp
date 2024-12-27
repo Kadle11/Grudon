@@ -24,7 +24,8 @@ int main(int argc, char **argv)
       "m, num-memory", "Number of memory nodes", cxxopts::value<size_t>())(
       "t, threads", "Number of threads", cxxopts::value<size_t>()->default_value("1"))(
       "p, partitioning-scheme", "Partitioning scheme file", cxxopts::value<std::string>())(
-      "a, algorithm", "Graph Algorithm", cxxopts::value<std::string>()->default_value("pr"))("h, help", "Print usage");
+      "a, algorithm", "Graph Algorithm", cxxopts::value<std::string>()->default_value("pr"))(
+      "o, offload-mode", "Offload Mode", cxxopts::value<uint32_t>()->default_value("0"))("h, help", "Print usage");
 
   std::string graph_path = "";
   size_t num_compute = 0;
@@ -32,6 +33,7 @@ int main(int argc, char **argv)
   size_t num_threads = 1;
   std::string partitioning_scheme_file = "";
   std::string algorithm = "";
+  uint32_t offload_mode = 0;
 
   try
   {
@@ -92,6 +94,11 @@ int main(int argc, char **argv)
         return 1;
       }
     }
+
+    if (result.count("offload-mode"))
+    {
+      offload_mode = result["offload-mode"].as<uint32_t>();
+    }
   }
   catch (const std::exception &e)
   {
@@ -148,7 +155,7 @@ int main(int argc, char **argv)
         node_type, "PageRank", graph_path, num_compute, num_memory, node_id, net, partitioning_scheme_file);
 
     graph_algorithm->init();
-    graph_algorithm->run();
+    graph_algorithm->run(offload_mode);
 
     graph_algorithm->verify();
 
@@ -160,7 +167,7 @@ int main(int argc, char **argv)
         node_type, "ConnectedComponents", graph_path, num_compute, num_memory, node_id, net, partitioning_scheme_file);
 
     graph_algorithm->init();
-    graph_algorithm->run();
+    graph_algorithm->run(offload_mode);
 
     graph_algorithm->verify();
 
@@ -172,7 +179,7 @@ int main(int argc, char **argv)
         node_type, "SingleSourceShortestPath", graph_path, num_compute, num_memory, node_id, net, partitioning_scheme_file);
 
     graph_algorithm->init();
-    graph_algorithm->run();
+    graph_algorithm->run(offload_mode);
 
     graph_algorithm->verify();
 
