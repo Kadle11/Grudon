@@ -34,9 +34,6 @@
 #include "MPI.hpp"
 
 
-using Graph = galois::graphs::LC_CSR_Graph<uint64_t, uint32_t>::with_no_lockable<true>::type;
-using GNode = Graph::GraphNode;
-
 // Create a AtomicElement Class
 template<typename T>
 class AtomicElement : public std::atomic<T>
@@ -261,7 +258,6 @@ class DistributedGraph
   }
 
   Graph lgraph;
-
  
   size_t& num_compute;
   size_t& num_memory;

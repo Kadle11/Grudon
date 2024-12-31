@@ -25,7 +25,9 @@ int main(int argc, char **argv)
       "t, threads", "Number of threads", cxxopts::value<size_t>()->default_value("1"))(
       "p, partitioning-scheme", "Partitioning scheme file", cxxopts::value<std::string>())(
       "a, algorithm", "Graph Algorithm", cxxopts::value<std::string>()->default_value("pr"))(
-      "o, offload-mode", "Offload Mode", cxxopts::value<uint32_t>()->default_value("0"))("h, help", "Print usage");
+      "o, offload-mode", "Offload Mode", cxxopts::value<uint32_t>()->default_value("1"))(
+      "max-iterations", "Maximum number of iterations", cxxopts::value<uint32_t>()->default_value("1000"))(
+      "h, help", "Print usage");
 
   std::string graph_path = "";
   size_t num_compute = 0;
@@ -34,6 +36,7 @@ int main(int argc, char **argv)
   std::string partitioning_scheme_file = "";
   std::string algorithm = "";
   uint32_t offload_mode = 0;
+  uint32_t max_iterations = 1000;
 
   try
   {
@@ -99,6 +102,11 @@ int main(int argc, char **argv)
     {
       offload_mode = result["offload-mode"].as<uint32_t>();
     }
+
+    if (result.count("max-iterations"))
+    {
+      max_iterations = result["max-iterations"].as<uint32_t>();
+    }
   }
   catch (const std::exception &e)
   {
@@ -155,7 +163,7 @@ int main(int argc, char **argv)
         node_type, "PageRank", graph_path, num_compute, num_memory, node_id, net, partitioning_scheme_file);
 
     graph_algorithm->init();
-    graph_algorithm->run(offload_mode);
+    graph_algorithm->run(offload_mode, max_iterations);
 
     graph_algorithm->verify();
 
@@ -167,7 +175,7 @@ int main(int argc, char **argv)
         node_type, "ConnectedComponents", graph_path, num_compute, num_memory, node_id, net, partitioning_scheme_file);
 
     graph_algorithm->init();
-    graph_algorithm->run(offload_mode);
+    graph_algorithm->run(offload_mode, max_iterations);
 
     graph_algorithm->verify();
 
@@ -179,7 +187,7 @@ int main(int argc, char **argv)
         node_type, "SingleSourceShortestPath", graph_path, num_compute, num_memory, node_id, net, partitioning_scheme_file);
 
     graph_algorithm->init();
-    graph_algorithm->run(offload_mode);
+    graph_algorithm->run(offload_mode, max_iterations);
 
     graph_algorithm->verify();
 

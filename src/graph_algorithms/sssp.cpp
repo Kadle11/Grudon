@@ -47,7 +47,7 @@ void SSSP<VertexProperty>::init()
 }
 
 template<typename VertexProperty>
-void SSSP<VertexProperty>::apply_updates()
+inline void SSSP<VertexProperty>::apply_updates()
 {
   // Print the Vertex Properties
   // for (GNode n = 0; n < this->worker->num_vertices; ++n)
@@ -58,7 +58,7 @@ void SSSP<VertexProperty>::apply_updates()
 }
 
 template<typename VertexProperty>
-void SSSP<VertexProperty>::gen_updates()
+inline void SSSP<VertexProperty>::gen_updates()
 {
   // galois::ThreadSafeOrderedSet<GNode> &updated_vertices = this->vertex_properties.getUpdatedVertices();
   std::vector<GNode> updated_vertices = this->vertex_properties.getUpdatedVertices();
@@ -90,7 +90,7 @@ void SSSP<VertexProperty>::gen_updates()
 }
 
 template<typename VertexProperty>
-void SSSP<VertexProperty>::update_frontier()
+inline void SSSP<VertexProperty>::update_frontier()
 {
   galois::substrate::SimpleLock lock;
   // galois::ThreadSafeOrderedSet<GNode> &updated_vertices = this->vertex_updates.getUpdatedVertices();
@@ -113,13 +113,13 @@ void SSSP<VertexProperty>::update_frontier()
 }
 
 template<typename VertexProperty>
-void SSSP<VertexProperty>::aggregate(GNode &lid, const VertexProperty &buffer_val)
+inline void SSSP<VertexProperty>::aggregate(GNode &lid, const VertexProperty &buffer_val)
 {
   this->vertex_updates.minUpdate(lid, buffer_val);
 }
 
 template<typename VertexProperty>
-bool SSSP<VertexProperty>::termination_check()
+inline bool SSSP<VertexProperty>::termination_check()
 {
   // return this->frontier.empty();
   return this->frontier.count() ? false : true;

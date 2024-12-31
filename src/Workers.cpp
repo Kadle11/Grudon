@@ -62,13 +62,13 @@ Worker<T>::~Worker()
 }
 
 template<typename T>
-uint32_t Worker<T>::getVertexComputePartition(const GNode& lid)
+inline uint32_t Worker<T>::getVertexComputePartition(const GNode& lid)
 {
   return distributed_graph->getMasterPartition(lid);
 }
 
 template<typename T>
-uint32_t Worker<T>::getVertexMemoryPartition(const GNode& lid)
+inline uint32_t Worker<T>::getVertexMemoryPartition(const GNode& lid)
 {
   return distributed_graph->getMirrorPartition(lid);
 }
@@ -89,20 +89,20 @@ UpdateWorker<T>::UpdateWorker(
 }
 
 template<typename T>
-void UpdateWorker<T>::aggregate(GraphAlgorithm<T>& algorithm, GNode& lid, const T& buffer_val)
+inline void UpdateWorker<T>::aggregate(GraphAlgorithm<T>& algorithm, GNode& lid, const T& buffer_val)
 {
   algorithm.aggregate(lid, buffer_val);
 }
 
 template<typename T>
-void UpdateWorker<T>::update(GraphAlgorithm<T>& algorithm)
+inline void UpdateWorker<T>::update(GraphAlgorithm<T>& algorithm)
 {
   algorithm.update_frontier();
   algorithm.apply_updates();
 }
 
 template<typename T>
-void UpdateWorker<T>::traverse(GraphAlgorithm<T>& algorithm)
+inline void UpdateWorker<T>::traverse(GraphAlgorithm<T>& algorithm)
 {
   // Do Nothing
 }
@@ -127,19 +127,19 @@ TraverseWorker<T>::TraverseWorker(
 }
 
 template<typename T>
-void TraverseWorker<T>::traverse(GraphAlgorithm<T>& algorithm)
+inline void TraverseWorker<T>::traverse(GraphAlgorithm<T>& algorithm)
 {
   algorithm.gen_updates();
 }
 
 template<typename T>
-void TraverseWorker<T>::update(GraphAlgorithm<T>& algorithm)
+inline void TraverseWorker<T>::update(GraphAlgorithm<T>& algorithm)
 {
   // Do Nothing
 }
 
 template<typename T>
-void TraverseWorker<T>::aggregate(GraphAlgorithm<T>& algorithm, GNode& lid, const T& buffer_val)
+inline void TraverseWorker<T>::aggregate(GraphAlgorithm<T>& algorithm, GNode& lid, const T& buffer_val)
 {
   // Do Nothing
 }
@@ -183,19 +183,19 @@ AggregateWorker<T>::AggregateWorker(
 }
 
 template<typename T>
-void AggregateWorker<T>::aggregate(GraphAlgorithm<T>& algorithm, GNode& lid, const T& buffer_val)
+inline void AggregateWorker<T>::aggregate(GraphAlgorithm<T>& algorithm, GNode& lid, const T& buffer_val)
 {
   algorithm.aggregate(lid, buffer_val);
 }
 
 template<typename T>
-void AggregateWorker<T>::update(GraphAlgorithm<T>& algorithm)
+inline void AggregateWorker<T>::update(GraphAlgorithm<T>& algorithm)
 {
   // Do Nothing
 }
 
 template<typename T>
-void AggregateWorker<T>::traverse(GraphAlgorithm<T>& algorithm)
+inline void AggregateWorker<T>::traverse(GraphAlgorithm<T>& algorithm)
 {
   // Do Nothing
 }

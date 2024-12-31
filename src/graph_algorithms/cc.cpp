@@ -40,7 +40,7 @@ void CC<VertexProperty>::init()
 }
 
 template<typename VertexProperty>
-void CC<VertexProperty>::apply_updates()
+inline void CC<VertexProperty>::apply_updates()
 {
   // // Print the Vertex Properties
   // for (GNode n = 0; n < this->worker->num_vertices; ++n)
@@ -51,7 +51,7 @@ void CC<VertexProperty>::apply_updates()
 }
 
 template<typename VertexProperty>
-void CC<VertexProperty>::gen_updates()
+inline void CC<VertexProperty>::gen_updates()
 {
   // galois::ThreadSafeOrderedSet<GNode> &updated_vertices = this->vertex_properties.getUpdatedVertices();
   std::vector<GNode> updated_vertices = this->vertex_properties.getUpdatedVertices();
@@ -84,7 +84,7 @@ void CC<VertexProperty>::gen_updates()
 }
 
 template<typename VertexProperty>
-void CC<VertexProperty>::update_frontier()
+inline void CC<VertexProperty>::update_frontier()
 {
   galois::substrate::SimpleLock lock;
   // galois::ThreadSafeOrderedSet<GNode> &updated_vertices = this->vertex_updates.getUpdatedVertices();
@@ -107,13 +107,13 @@ void CC<VertexProperty>::update_frontier()
 }
 
 template<typename VertexProperty>
-void CC<VertexProperty>::aggregate(GNode &lid, const VertexProperty &buffer_val)
+inline void CC<VertexProperty>::aggregate(GNode &lid, const VertexProperty &buffer_val)
 {
   this->vertex_updates.minUpdate(lid, buffer_val);
 }
 
 template<typename VertexProperty>
-bool CC<VertexProperty>::termination_check()
+inline bool CC<VertexProperty>::termination_check()
 {
   // return this->frontier.empty();
   return this->frontier.count() ? false : true;

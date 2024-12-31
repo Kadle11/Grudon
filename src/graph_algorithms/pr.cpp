@@ -61,7 +61,7 @@ void PageRank<VertexProperty>::init()
 }
 
 template<typename VertexProperty>
-void PageRank<VertexProperty>::apply_updates()
+inline void PageRank<VertexProperty>::apply_updates()
 {
   // Print the Vertex Properties
   // for (GNode n = 0; n < this->worker->num_vertices; ++n)
@@ -88,7 +88,7 @@ void PageRank<VertexProperty>::apply_updates()
 }
 
 template<typename VertexProperty>
-void PageRank<VertexProperty>::gen_updates()
+inline void PageRank<VertexProperty>::gen_updates()
 {
   // galois::ThreadSafeOrderedSet<GNode> &updated_vertices = this->vertex_properties.getUpdatedVertices();
   std::vector<GNode> updated_vertices = this->vertex_properties.getUpdatedVertices();
@@ -121,7 +121,7 @@ void PageRank<VertexProperty>::gen_updates()
 }
 
 template<typename VertexProperty>
-void PageRank<VertexProperty>::update_frontier()
+inline void PageRank<VertexProperty>::update_frontier()
 {
   // galois::substrate::SimpleLock lock;
   // galois::ThreadSafeOrderedSet<GNode> &updated_vertices = this->vertex_updates.getUpdatedVertices();
@@ -147,13 +147,13 @@ void PageRank<VertexProperty>::update_frontier()
 }
 
 template<typename VertexProperty>
-void PageRank<VertexProperty>::aggregate(GNode &lid, const VertexProperty &buffer_val)
+inline void PageRank<VertexProperty>::aggregate(GNode &lid, const VertexProperty &buffer_val)
 {
   this->vertex_updates.addUpdate(lid, buffer_val);
 }
 
 template<typename VertexProperty>
-bool PageRank<VertexProperty>::termination_check()
+inline bool PageRank<VertexProperty>::termination_check()
 {
   // return this->frontier.empty();
   return this->frontier.count() ? false : true;

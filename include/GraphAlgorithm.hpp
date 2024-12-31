@@ -36,15 +36,15 @@ class GraphAlgorithm
       std::string& partitioning_scheme_file);
 
   virtual void init() = 0;
-  virtual void apply_updates() = 0;
-  virtual void gen_updates() = 0;
-  virtual void update_frontier() = 0;
-  virtual void aggregate(GNode& lid, const VertexProperty& buffer_val) = 0;
-  virtual bool termination_check() = 0;
+  inline virtual void apply_updates() = 0;
+  inline virtual void gen_updates() = 0;
+  inline virtual void update_frontier() = 0;
+  inline virtual void aggregate(GNode& lid, const VertexProperty& buffer_val) = 0;
+  inline virtual bool termination_check() = 0;
   virtual void printState() = 0;
   virtual void verify() = 0;
 
-  void run(uint32_t& offload_mode);
+  void run(uint32_t& offload_mode, uint32_t& max_iterations);
 
  protected:
   std::string algorithm_name;

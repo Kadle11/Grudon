@@ -31,9 +31,8 @@ class Worker
       MPICore& net);
   virtual ~Worker();
 
-  // FIXME: Avoid the Translation
-  uint32_t getVertexComputePartition(const GNode& lid);
-  uint32_t getVertexMemoryPartition(const GNode& lid);
+  inline uint32_t getVertexComputePartition(const GNode& lid);
+  inline uint32_t getVertexMemoryPartition(const GNode& lid);
 
   std::vector<galois::DynamicBitSet> bitCommVector_Send;
   std::vector<galois::DynamicBitSet> bitCommVector_Recv;
@@ -54,9 +53,9 @@ class Worker
   uint64_t num_edges;
   NODE_TYPE node_type;
 
-  virtual void update(GraphAlgorithm<T>& algorithm) = 0;
-  virtual void traverse(GraphAlgorithm<T>& algorithm) = 0;
-  virtual void aggregate(GraphAlgorithm<T>& algorithm, GNode& lid, const T& buffer_val) = 0;
+  inline virtual void update(GraphAlgorithm<T>& algorithm) = 0;
+  inline virtual void traverse(GraphAlgorithm<T>& algorithm) = 0;
+  inline virtual void aggregate(GraphAlgorithm<T>& algorithm, GNode& lid, const T& buffer_val) = 0;
 };
 
 template<typename T>
@@ -74,11 +73,11 @@ class AggregateWorker : public Worker<T>
   std::vector<std::pair<galois::DynamicBitSet, galois::LargeArray<T>>> UpdateWorker_Recv_NDP_Offload();
 
  private:
-  void aggregate(GraphAlgorithm<T>& algorithm, GNode& lid, const T& buffer_val) override;
+  inline void aggregate(GraphAlgorithm<T>& algorithm, GNode& lid, const T& buffer_val) override;
 
   // Dummy Functions
-  void update(GraphAlgorithm<T>& algorithm) override;
-  void traverse(GraphAlgorithm<T>& algorithm) override;
+  inline void update(GraphAlgorithm<T>& algorithm) override;
+  inline void traverse(GraphAlgorithm<T>& algorithm) override;
 
   std::vector<MPI_Request> bv_requests;
   std::vector<MPI_Request> data_requests;
@@ -102,11 +101,11 @@ class UpdateWorker : public Worker<T>
   AggregateWorker<T> aggregator_worker;  // Public object of type AggregateWorker
 
  private:
-  void update(GraphAlgorithm<T>& algorithm) override;
-  void aggregate(GraphAlgorithm<T>& algorithm, GNode& lid, const T& buffer_val) override;
+  inline void update(GraphAlgorithm<T>& algorithm) override;
+  inline void aggregate(GraphAlgorithm<T>& algorithm, GNode& lid, const T& buffer_val) override;
 
   // Dummy Function
-  void traverse(GraphAlgorithm<T>& algorithm) override;
+  inline void traverse(GraphAlgorithm<T>& algorithm) override;
 };
 
 template<typename T>
@@ -124,11 +123,11 @@ class TraverseWorker : public Worker<T>
   ~TraverseWorker();
 
  private:
-  void traverse(GraphAlgorithm<T>& algorithm);
+  inline void traverse(GraphAlgorithm<T>& algorithm);
 
   // Dummy Functions
-  void update(GraphAlgorithm<T>& algorithm) override;
-  void aggregate(GraphAlgorithm<T>& algorithm, GNode& lid, const T& buffer_val) override;
+  inline void update(GraphAlgorithm<T>& algorithm) override;
+  inline void aggregate(GraphAlgorithm<T>& algorithm, GNode& lid, const T& buffer_val) override;
 };
 
 // Explicit Instantiation

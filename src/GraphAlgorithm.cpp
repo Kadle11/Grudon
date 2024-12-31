@@ -159,7 +159,7 @@ GraphAlgorithm<VertexProperty>::GraphAlgorithm(
 }
 
 template<typename VertexProperty>
-void GraphAlgorithm<VertexProperty>::run(uint32_t &offload_mode)
+void GraphAlgorithm<VertexProperty>::run(uint32_t &offload_mode, uint32_t &max_iterations)
 {
   std::vector<uint32_t> idxTracker;
   std::vector<MPI_Request> bv_requests;
@@ -203,7 +203,7 @@ void GraphAlgorithm<VertexProperty>::run(uint32_t &offload_mode)
   size_t VertexProperty_size = sizeof(VertexProperty);
 
   size_t ndp_offload_threshold =
-      (worker->total_vertices / 10) * (VertexProperty_size / sizeof(GNode)) * this->distributed_graph->replication_factor;
+      (worker->total_vertices / 10) * (VertexProperty_size / sizeof(GNode)) * worker->distributed_graph->replication_factor;
   uint64_t inc_offload_threshold = std::accumulate(worker->out_degrees.begin(), worker->out_degrees.end(), 0) / 10;
 
   uint64_t frontier_size = 0;
@@ -229,7 +229,7 @@ void GraphAlgorithm<VertexProperty>::run(uint32_t &offload_mode)
   uint64_t curr_bytes_moved = 0;
   uint64_t prev_bytes_moved = 0;
 
-  while (worker_completion_count != num_compute && iteration < MAX_ITERATIONS)
+  while (worker_completion_count != num_compute && iteration < max_iterations)
   {
     memory_offload = init_decision;
     switch_offload = NO_OFFLOAD;
@@ -911,8 +911,8 @@ void GraphAlgorithm<VertexProperty>::run(uint32_t &offload_mode)
                 for (size_t k = 1; k < worker->out_degrees[src] + 1; k++)
                 {
                   GNode l_dst = worker->distributed_graph->getLocalNode(eBuffer[k]);
-                  vertex_updates.addUpdate(l_dst, vertex_properties[src]);
-                  // vertex_updates.minUpdate(l_dst, vertex_properties[src]);
+                  // vertex_updates.addUpdate(l_dst, vertex_properties[src]);
+                  vertex_updates.minUpdate(l_dst, vertex_properties[src]);
                 }
               }
             },

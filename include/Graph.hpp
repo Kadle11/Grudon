@@ -6,7 +6,7 @@
 #include <galois/graphs/LCGraph.h>
 #include <galois/graphs/TypeTraits.h>
 
-using Graph = galois::graphs::LC_CSR_Graph<uint64_t, uint32_t>::with_no_lockable<true>::type;
+using Graph = galois::graphs::LC_CSR_Graph<uint64_t, void>::with_no_lockable<true>::type;
 using GNode = Graph::GraphNode;
 
 enum NODE_TYPE

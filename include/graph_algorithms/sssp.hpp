@@ -18,11 +18,11 @@ class SSSP : public GraphAlgorithm<VertexProperty>
       std::string partitioning_scheme_file = "");
 
   void init() override;
-  void apply_updates() override;
-  void gen_updates() override;
-  void update_frontier() override;
-  void aggregate(GNode &lid, const VertexProperty &buffer_val) override;
-  bool termination_check() override;
+  inline void apply_updates() override;
+  inline void gen_updates() override;
+  inline void update_frontier() override;
+  inline void aggregate(GNode &lid, const VertexProperty &buffer_val) override;
+  inline bool termination_check() override;
   void printState() override;
   void verify() override;
 
