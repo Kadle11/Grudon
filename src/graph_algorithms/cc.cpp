@@ -24,7 +24,7 @@ void CC<VertexProperty>::init()
     for (GNode n = 0; n < this->worker->num_vertices; ++n)
     {
       this->vertex_properties[n] = this->worker->distributed_graph->getGlobalNode(n);
-      this->vertex_updates[n] = std::numeric_limits<VertexProperty>::max();
+      this->vertex_updates[n] = this->worker->distributed_graph->getGlobalNode(n);
       // this->frontier.push_back(n);
       this->frontier.set(n);
     }
@@ -33,8 +33,8 @@ void CC<VertexProperty>::init()
   {
     for (GNode n = 0; n < this->worker->num_vertices; ++n)
     {
-      this->vertex_properties[n] = std::numeric_limits<VertexProperty>::max();
-      this->vertex_updates[n] = std::numeric_limits<VertexProperty>::max();
+      this->vertex_properties[n] = this->worker->distributed_graph->getGlobalNode(n);
+      this->vertex_updates[n] = this->worker->distributed_graph->getGlobalNode(n);
     }
   }
 }

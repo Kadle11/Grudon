@@ -31,15 +31,15 @@ do
 
     if [ "$ALGORITHM" == "sssp" ]; then
         # Parse Galois PR log
-        $GALOIS_PR_PARSER $GLUON_LOG_FILE | awk -v var="$i" -v graph="$GRAPH_NAME" '{print "graph, Gluon, " var ", " $0}'
-        $GALOIS_PR_PARSER $GRAPHQ_LOG_FILE | awk -v var="$i" -v graph="$GRAPH_NAME" '{print "graph, GraphQOpt, " var ", " $0}'
-        $GROUDON_PARSER $GROUDON_LOG_FILE | awk -v var="$i" -v graph="$GRAPH_NAME" '{print "graph, Groudon, " var ", " $0}'
+        cat $GLUON_LOG_FILE | grep -E '(Timer_0|, SSSP_0|Sync_SSSP_0)' | awk -F, '{print $6}' | tr "\n" "," | sed 's/,$/\n/g' | awk -v var="$i" -v graph="$GRAPH_NAME" '{print graph ", Gluon, " var ", " $0}'
+        cat $GRAPHQ_LOG_FILE | grep -E '(Timer_0|, SSSP_0|Sync_SSSP_0)' | awk -F, '{print $6}' | tr "\n" "," | sed 's/,$/\n/g' | awk -v var="$i" -v graph="$GRAPH_NAME" '{print graph ", GraphQOpt, " var ", " $0}'
+        $GROUDON_PARSER $GROUDON_LOG_FILE | awk -v var="$i" -v graph="$GRAPH_NAME" '{print graph ", Groudon, " var ", " $0}'
     fi
 
     if [ "$ALGORITHM" == "cc" ]; then
         # Parse Galois PR log
-        $GALOIS_PR_PARSER $GLUON_LOG_FILE | awk -v var="$i" -v graph="$GRAPH_NAME" '{print "graph, Gluon, " var ", " $0}'
-        $GALOIS_PR_PARSER $GRAPHQ_LOG_FILE | awk -v var="$i" -v graph="$GRAPH_NAME" '{print "graph, GraphQOpt, " var ", " $0}'
-        $GROUDON_PARSER $GROUDON_LOG_FILE | awk -v var="$i" -v graph="$GRAPH_NAME" '{print "graph, Groudon, " var ", " $0}'
+        cat $GLUON_LOG_FILE | grep -E '(Timer_0|, ConnectedComp_0|Sync_ConnectedComp_0)' | awk -F, '{print $6}' | tr "\n" "," | sed 's/,$/\n/g' | awk -v var="$i" -v graph="$GRAPH_NAME" '{print graph ", Gluon, " var ", " $0}'
+        cat $GRAPHQ_LOG_FILE | grep -E '(Timer_0|, ConnectedComp_0|Sync_ConnectedComp_0)' | awk -F, '{print $6}' | tr "\n" "," | sed 's/,$/\n/g' | awk -v var="$i" -v graph="$GRAPH_NAME" '{print graph ", GraphQOpt, " var ", " $0}'
+        $GROUDON_PARSER $GROUDON_LOG_FILE | awk -v var="$i" -v graph="$GRAPH_NAME" '{print graph ", Groudon, " var ", " $0}'
     fi
 done

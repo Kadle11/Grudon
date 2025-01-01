@@ -203,8 +203,12 @@ void GraphAlgorithm<VertexProperty>::run(uint32_t &offload_mode, uint32_t &max_i
   size_t VertexProperty_size = sizeof(VertexProperty);
 
   size_t ndp_offload_threshold =
-      (worker->total_vertices / 10) * (VertexProperty_size / sizeof(GNode)) * worker->distributed_graph->replication_factor;
-  uint64_t inc_offload_threshold = std::accumulate(worker->out_degrees.begin(), worker->out_degrees.end(), 0) / 10;
+      (worker->num_vertices / 5) * (VertexProperty_size / sizeof(GNode)) * worker->distributed_graph->replication_factor;
+  uint64_t inc_offload_threshold = worker->num_vertices / (5 * worker->distributed_graph->replication_factor);
+
+  spdlog::info("[Proc {}] NV:{}, RF:{}, NDP Offload Threshold: {}", worker->node_id, worker->num_vertices,
+               worker->distributed_graph->replication_factor, ndp_offload_threshold);
+  spdlog::info("[Proc {}] INC Offload Threshold: {}", worker->node_id, inc_offload_threshold);
 
   uint64_t frontier_size = 0;
   uint64_t neighbor_count = 0;
@@ -261,12 +265,12 @@ void GraphAlgorithm<VertexProperty>::run(uint32_t &offload_mode, uint32_t &max_i
             frontier_size);
       }
 
-      // if (memory_offload == NDP_OFFLOAD)
-      // {
-      //   switch_offload =
-      //       INCEngine(current_frontier, worker->out_degrees, *worker->distributed_graph, inc_offload_threshold,
-      //       num_memory);
-      // }
+      if (memory_offload == NDP_OFFLOAD)
+      {
+        switch_offload =
+            INCEngine(current_frontier, worker->out_degrees, *worker->distributed_graph, inc_offload_threshold,
+            num_memory);
+      }
     }
 
     net.allReduce(&memory_offload, &ndp_decision, 1, MPI_UINT32_T, MPI_MIN);
@@ -911,8 +915,8 @@ void GraphAlgorithm<VertexProperty>::run(uint32_t &offload_mode, uint32_t &max_i
                 for (size_t k = 1; k < worker->out_degrees[src] + 1; k++)
                 {
                   GNode l_dst = worker->distributed_graph->getLocalNode(eBuffer[k]);
-                  // vertex_updates.addUpdate(l_dst, vertex_properties[src]);
-                  vertex_updates.minUpdate(l_dst, vertex_properties[src]);
+                  vertex_updates.addUpdate(l_dst, vertex_properties[src]);
+                  // vertex_updates.minUpdate(l_dst, vertex_properties[src]);
                 }
               }
             },

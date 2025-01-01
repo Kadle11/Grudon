@@ -46,6 +46,11 @@ OFFLOAD_DECISION NDPEngine(
 
   neighbor_count = neighbor_accum.reduce();
 
+  if ((frontier_size + neighbor_count) > offload_threshold)
+  {
+    return NDP_OFFLOAD;
+  }
+
   decision_coeff += 0.7 * offload_coeff - 0.5 * fetch_coeff;
   
   spdlog::info(
@@ -55,7 +60,7 @@ OFFLOAD_DECISION NDPEngine(
       offload_coeff,
       fetch_coeff);
 
-  if (decision_coeff >= -1.5)
+  if (decision_coeff >= -1)
   {
     return NDP_OFFLOAD;
   }

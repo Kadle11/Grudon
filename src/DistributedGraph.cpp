@@ -354,7 +354,7 @@ DistributedGraph::DistributedGraph(
               if (mirror_partition[dst] != curMirror)
               {
                 cross_node_mirrors[curMirror].set(dst);
-                total_cross_node_mirrors += 1;
+                // total_cross_node_mirrors += 1;
               }
             }
           }
@@ -376,7 +376,7 @@ DistributedGraph::DistributedGraph(
               if (mirror_partition[dst] != curMirror)
               {
                 cross_node_mirrors[curMirror].set(dst);
-                total_cross_node_mirrors += 1;
+                // total_cross_node_mirrors += 1;
               }
             }
           }
@@ -455,7 +455,13 @@ DistributedGraph::DistributedGraph(
     new_master_partition.deallocate();
     new_mirror_partition.deallocate();
 
-    replication_factor = float(total_cross_node_mirrors.reduce() + bgraph.size()) / bgraph.size();
+    uint64_t global_cross_node_mirrors = std::accumulate(
+        cross_node_mirrors.begin(),
+        cross_node_mirrors.end(),
+        0,
+        [](uint64_t a, galois::DynamicBitSet& b) { return a + b.count(); });
+
+    replication_factor = float(global_cross_node_mirrors + bgraph.size()) / bgraph.size();
     galois::runtime::reportStat_Single("Partitioning Scheme", "Replication Factor", replication_factor);
   }
   else
@@ -963,9 +969,7 @@ double calculateSkew(std::vector<GNode>& frontier, uint32_t& num_memory, Distrib
       galois::iterate(frontier.begin(), frontier.end()),
       [&](const GNode& lid)
       {
-        GNode gid = distributed_graph.getGlobalNode(lid);
-        uint32_t worker_id = distributed_graph.getMirrorPartition(gid);
-
+        uint32_t worker_id = distributed_graph.getMirrorPartition(lid);
         mirrorCoverage[worker_id] += 1;
       },
       galois::loopname("Mirror Coverage"),
@@ -983,8 +987,8 @@ double calculateSkew(std::vector<GNode>& frontier, uint32_t& num_memory, Distrib
   double variance = std::accumulate(
       mirrorCoverageVector.begin(),
       mirrorCoverageVector.end(),
-      0,
-      [&](double a, uint64_t b) { return a + std::pow(b - avgMirrorCoverage, 2); });
+      0.0,
+      [&](double a, uint64_t b) { return a + std::pow((b - avgMirrorCoverage), 2); });
 
   double stddev = std::sqrt(variance / num_memory);
 
@@ -998,6 +1002,9 @@ double calculateSkew(std::vector<GNode>& frontier, uint32_t& num_memory, Distrib
   {
     return 0;
   }
+
+  spdlog::info(
+      "Average Mirror Coverage: {}, Variance: {}, StdDev: {}, Skewness: {}", avgMirrorCoverage, variance, stddev, skewness);
 
   skewness /= (num_memory * std::pow(stddev, 3));
 
