@@ -257,8 +257,8 @@ std::vector<std::pair<galois::DynamicBitSet, galois::LargeArray<T>>> AggregateWo
         else
         {
           // aggregatePropertyMap[j] += propertyBuffers[i][local_idx];
-          // aggregatePropertyMap[j] = std::min(aggregatePropertyMap[j], propertyBuffers[i][local_idx]);
-          aggregatePropertyMap.find(j)->second += propertyBuffers[i][local_idx];
+          aggregatePropertyMap[j] = std::min(aggregatePropertyMap[j], propertyBuffers[i][local_idx]);
+          // aggregatePropertyMap.find(j)->second += propertyBuffers[i][local_idx];
         }
         local_idx++;
       }

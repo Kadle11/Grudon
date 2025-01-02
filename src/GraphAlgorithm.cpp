@@ -161,6 +161,12 @@ GraphAlgorithm<VertexProperty>::GraphAlgorithm(
 template<typename VertexProperty>
 void GraphAlgorithm<VertexProperty>::run(uint32_t &offload_mode, uint32_t &max_iterations)
 {
+  const char *OFFLOAD_DECISION_STR[] = {
+    "NDP_OFFLOAD",
+    "INC_OFFLOAD",
+    "NO_OFFLOAD",
+  };
+
   std::vector<uint32_t> idxTracker;
   std::vector<MPI_Request> bv_requests;
   std::vector<MPI_Request> data_requests;
@@ -204,10 +210,14 @@ void GraphAlgorithm<VertexProperty>::run(uint32_t &offload_mode, uint32_t &max_i
 
   size_t ndp_offload_threshold =
       (worker->num_vertices / 5) * (VertexProperty_size / sizeof(GNode)) * worker->distributed_graph->replication_factor;
-  uint64_t inc_offload_threshold = worker->num_vertices / (5 * worker->distributed_graph->replication_factor);
+  uint64_t inc_offload_threshold = worker->num_vertices / worker->distributed_graph->replication_factor;
 
-  spdlog::info("[Proc {}] NV:{}, RF:{}, NDP Offload Threshold: {}", worker->node_id, worker->num_vertices,
-               worker->distributed_graph->replication_factor, ndp_offload_threshold);
+  spdlog::info(
+      "[Proc {}] NV:{}, RF:{}, NDP Offload Threshold: {}",
+      worker->node_id,
+      worker->num_vertices,
+      worker->distributed_graph->replication_factor,
+      ndp_offload_threshold);
   spdlog::info("[Proc {}] INC Offload Threshold: {}", worker->node_id, inc_offload_threshold);
 
   uint64_t frontier_size = 0;
@@ -268,13 +278,19 @@ void GraphAlgorithm<VertexProperty>::run(uint32_t &offload_mode, uint32_t &max_i
       if (memory_offload == NDP_OFFLOAD)
       {
         switch_offload =
-            INCEngine(current_frontier, worker->out_degrees, *worker->distributed_graph, inc_offload_threshold,
-            num_memory);
+            INCEngine(current_frontier, worker->out_degrees, *worker->distributed_graph, inc_offload_threshold, num_memory);
       }
     }
 
     net.allReduce(&memory_offload, &ndp_decision, 1, MPI_UINT32_T, MPI_MIN);
     net.allReduce(&switch_offload, &inc_decision, 1, MPI_UINT32_T, MPI_MIN);
+
+    // spdlog::info(
+    //     "[Proc {}/{}] NDP Offload: {}, INC Offload: {}",
+    //     worker->node_id,
+    //     iteration,
+    //     OFFLOAD_DECISION_STR[ndp_decision],
+    //     OFFLOAD_DECISION_STR[inc_decision]);
 
     // Send the Frontier to all Traversers
     if (node_type == COMPUTE_NODE)
@@ -518,7 +534,7 @@ void GraphAlgorithm<VertexProperty>::run(uint32_t &offload_mode, uint32_t &max_i
         const std::vector<GNode> updated_vertices = vertex_updates.getUpdatedVertices();
         spdlog::debug("[Proc {}] Updated Vertices: {}", this->worker->node_id, fmt_array(updated_vertices));
 
-        if (switch_offload == INC_OFFLOAD)
+        if (inc_decision == INC_OFFLOAD)
         {
           std::vector<std::map<GNode, VertexProperty>> propertyMap(num_compute);
           for (const GNode &lid : updated_vertices)
@@ -746,7 +762,7 @@ void GraphAlgorithm<VertexProperty>::run(uint32_t &offload_mode, uint32_t &max_i
         uint64_t bytes_recv = 0;
         auto update_worker = static_cast<UpdateWorker<VertexProperty> *>(worker);
 
-        if (switch_offload == INC_OFFLOAD)
+        if (inc_decision == INC_OFFLOAD)
         {
           auto recv_data = update_worker->aggregator_worker.UpdateWorker_Recv_NDP_Offload();
           for (int i = 0; i < recv_data.size(); i++)
@@ -770,6 +786,9 @@ void GraphAlgorithm<VertexProperty>::run(uint32_t &offload_mode, uint32_t &max_i
               }
             }
           }
+
+          // spdlog::info(
+          //     "[Proc {}] Agg Updated Vertices: {}", this->worker->node_id, fmt_array(vertex_updates.getUpdatedVertices()));
         }
         else
         {
@@ -821,8 +840,8 @@ void GraphAlgorithm<VertexProperty>::run(uint32_t &offload_mode, uint32_t &max_i
                 galois::no_stats(),
                 galois::steal());
 
-            // spdlog::info("[Proc {}] Updated Vertices: {}", this->worker->node_id,
-            // fmt_array(updated_property_vertices));
+            // spdlog::info(
+            //     "[Proc {}] Updated Vertices: {}", this->worker->node_id, fmt_array(vertex_updates.getUpdatedVertices()));
           }
         }
       }
@@ -915,8 +934,8 @@ void GraphAlgorithm<VertexProperty>::run(uint32_t &offload_mode, uint32_t &max_i
                 for (size_t k = 1; k < worker->out_degrees[src] + 1; k++)
                 {
                   GNode l_dst = worker->distributed_graph->getLocalNode(eBuffer[k]);
-                  vertex_updates.addUpdate(l_dst, vertex_properties[src]);
-                  // vertex_updates.minUpdate(l_dst, vertex_properties[src]);
+                  // vertex_updates.addUpdate(l_dst, vertex_properties[src]);
+                  vertex_updates.minUpdate(l_dst, vertex_properties[src]);
                 }
               }
             },
