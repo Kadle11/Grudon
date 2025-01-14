@@ -86,6 +86,7 @@ DistributedGraph::DistributedGraph(
   if (node_id == 0)
   {
     total_vertices = bgraph.size();
+    num_edges = bgraph.sizeEdges();
     num_vertices = master_partition_sizes[0];
     for (int i = 1; i < num_compute; i++)
     {
@@ -93,6 +94,7 @@ DistributedGraph::DistributedGraph(
       net.send(i, 0, &total_vertices, 1, MPI_UINT64_T);
       net.send(i, 0, mirror_partition.data(), total_vertices, MPI_GNODE_T);
       net.send(i, 0, mirror_partition_sizes.data(), num_memory, MPI_UINT64_T);
+      net.send(i, 0, &num_edges, 1, MPI_UINT64_T);
     }
 
     for (int i = 0; i < num_memory; i++)
@@ -121,6 +123,7 @@ DistributedGraph::DistributedGraph(
 
       net.recv(0, 0, mirror_partition.data(), total_vertices, MPI_GNODE_T, MPI_STATUS_IGNORE);
       net.recv(0, 0, mirror_partition_sizes.data(), num_memory, MPI_UINT64_T, MPI_STATUS_IGNORE);
+      net.recv(0, 0, &num_edges, 1, MPI_UINT64_T, MPI_STATUS_IGNORE);
     }
     else if (node_type == MEMORY_NODE)
     {
