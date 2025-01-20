@@ -7,6 +7,8 @@
 #include "offload_engine/INCEngine.hpp"
 #include "offload_engine/NDPEngine.hpp"
 
+#define MEASURE_IDLE_TIME 1
+
 template<typename VertexProperty>
 void GraphAlgorithm<VertexProperty>::generatePerThreadMatrix(const std::vector<GNode> &vertices)
 {
@@ -235,6 +237,7 @@ void GraphAlgorithm<VertexProperty>::run(uint32_t &offload_mode, uint32_t &max_i
   galois::StatTimer update_timer;
   galois::StatTimer cPhase1_timer;
   galois::StatTimer cPhase2_timer;
+  galois::StatTimer idle_timer;
 
   std::vector<GNode> current_frontier;
 
@@ -277,8 +280,9 @@ void GraphAlgorithm<VertexProperty>::run(uint32_t &offload_mode, uint32_t &max_i
 
       if (memory_offload == NDP_OFFLOAD)
       {
-        switch_offload =
-            INCEngine(current_frontier, worker->out_degrees, *worker->distributed_graph, inc_offload_threshold, num_memory);
+        // switch_offload =
+        //     INCEngine(current_frontier, worker->out_degrees, *worker->distributed_graph, inc_offload_threshold,
+        //     num_memory);
       }
     }
 
@@ -403,6 +407,10 @@ void GraphAlgorithm<VertexProperty>::run(uint32_t &offload_mode, uint32_t &max_i
       {
         for (int i = 0; i < num_compute; i++)
         {
+#ifdef MEASURE_IDLE_TIME
+          idle_timer.start();
+#endif
+
           net.Irecv(
               i,
               0,
@@ -420,6 +428,10 @@ void GraphAlgorithm<VertexProperty>::run(uint32_t &offload_mode, uint32_t &max_i
               MPI_VERTEX_PROPERTY_T,
               &statuses[i],
               &data_requests[i]);
+
+#ifdef MEASURE_IDLE_TIME
+          idle_timer.stop();
+#endif
 
           // size_t bitCommVectorSize = worker->bitCommVector[i].size();
           // for (size_t j = 0; j < bitCommVectorSize; j++)
@@ -476,6 +488,9 @@ void GraphAlgorithm<VertexProperty>::run(uint32_t &offload_mode, uint32_t &max_i
       {
         for (int i = 0; i < num_compute; i++)
         {
+#ifdef MEASURE_IDLE_TIME
+          idle_timer.start();
+#endif
           net.Irecv(
               i,
               0,
@@ -484,6 +499,9 @@ void GraphAlgorithm<VertexProperty>::run(uint32_t &offload_mode, uint32_t &max_i
               MPI_UINT64_T,
               &statuses[i],
               &bv_requests[i]);
+#ifdef MEASURE_IDLE_TIME
+          idle_timer.stop();
+#endif
 
           const std::vector<GNode> &updated_property_vertices = worker->bitCommVector_Recv[i].getOffsets();
           const size_t &nVertices = updated_property_vertices.size();
@@ -788,12 +806,16 @@ void GraphAlgorithm<VertexProperty>::run(uint32_t &offload_mode, uint32_t &max_i
           }
 
           // spdlog::info(
-          //     "[Proc {}] Agg Updated Vertices: {}", this->worker->node_id, fmt_array(vertex_updates.getUpdatedVertices()));
+          //     "[Proc {}] Agg Updated Vertices: {}", this->worker->node_id,
+          //     fmt_array(vertex_updates.getUpdatedVertices()));
         }
         else
         {
           for (int i = 0; i < num_memory; i++)
           {
+#ifdef MEASURE_IDLE_TIME
+            idle_timer.start();
+#endif
             bytes_recv = net.Irecv(
                 i + num_compute,
                 0,
@@ -811,6 +833,9 @@ void GraphAlgorithm<VertexProperty>::run(uint32_t &offload_mode, uint32_t &max_i
                 MPI_VERTEX_PROPERTY_T,
                 &statuses[i],
                 &data_requests[i]);
+#ifdef MEASURE_IDLE_TIME
+            idle_timer.stop();
+#endif
 
             size_t bitCommVectorSize = worker->bitCommVector_Recv[i].size();
             const std::vector<GNode> updated_property_vertices = worker->bitCommVector_Recv[i].getOffsets();
@@ -920,6 +945,9 @@ void GraphAlgorithm<VertexProperty>::run(uint32_t &offload_mode, uint32_t &max_i
                 GNode &lid = frontier_iter[j];
                 uint32_t worker_id = this->worker->getVertexMemoryPartition(lid);
 
+#ifdef MEASURE_IDLE_TIME
+                idle_timer.start();
+#endif
                 net.Irecv(
                     worker_id + num_compute,
                     0,
@@ -928,15 +956,20 @@ void GraphAlgorithm<VertexProperty>::run(uint32_t &offload_mode, uint32_t &max_i
                     MPI_GNODE_T,
                     &buf_statuses[worker_id],
                     &buf_requests[worker_id]);
+#ifdef MEASURE_IDLE_TIME
+                idle_timer.stop();
+#endif
 
                 GNode src = this->worker->distributed_graph->getLocalNode(eBuffer[0]);
 
+                traversal_timer.start();
                 for (size_t k = 1; k < worker->out_degrees[src] + 1; k++)
                 {
                   GNode l_dst = worker->distributed_graph->getLocalNode(eBuffer[k]);
                   // vertex_updates.addUpdate(l_dst, vertex_properties[src]);
                   vertex_updates.minUpdate(l_dst, vertex_properties[src]);
                 }
+                traversal_timer.stop();
               }
             },
             galois::loopname("Generate BitCommVector"),
@@ -1052,4 +1085,5 @@ void GraphAlgorithm<VertexProperty>::run(uint32_t &offload_mode, uint32_t &max_i
   galois::runtime::reportStat_Single(algorithm_name, "UpdateTimer", update_timer.get());
   galois::runtime::reportStat_Single(algorithm_name, "CPhase1Timer", cPhase1_timer.get());
   galois::runtime::reportStat_Single(algorithm_name, "CPhase2Timer", cPhase2_timer.get());
+  galois::runtime::reportStat_Single(algorithm_name, "IdleTimer", idle_timer.get());
 }

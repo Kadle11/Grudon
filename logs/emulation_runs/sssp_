@@ -1,0 +1,23 @@
+[aries1.cc.gatech.edu:1678109] MCW rank 0 bound to socket 0[core 0[hwt 0]], socket 0[core 1[hwt 0]], socket 0[core 2[hwt 0]], socket 0[core 3[hwt 0]]: [B./B./B./B./../../../../../..][../../../../../../../../../..][../../../../../../../../../..][../../../../../../../../../..]
+[aries1.cc.gatech.edu:1678109] MCW rank 1 bound to socket 1[core 10[hwt 0]], socket 1[core 11[hwt 0]], socket 1[core 12[hwt 0]], socket 1[core 13[hwt 0]]: [../../../../../../../../../..][B./B./B./B./../../../../../..][../../../../../../../../../..][../../../../../../../../../..]
+[aries1.cc.gatech.edu:1678109] MCW rank 2 bound to socket 2[core 20[hwt 0]], socket 2[core 21[hwt 0]], socket 2[core 22[hwt 0]], socket 2[core 23[hwt 0]]: [../../../../../../../../../..][../../../../../../../../../..][B./B./B./B./../../../../../..][../../../../../../../../../..]
+DEBUG: [[15:23:48]   0] [0] MPI initialized
+DEBUG: [[15:23:48]   0] [0] MPI initialized
+DEBUG: [[15:23:48]   0] [0] MPI initialized
+D-Galois Benchmark Suite v6.0.0 (unknown)
+Copyright (C) 2018 The University of Texas at Austin
+http://iss.ices.utexas.edu/galois/
+
+application: SSSP - Distributed Heterogeneous with worklist.
+Variant of Chaotic relaxation SSSP on Distributed Galois.
+
+[1] Master distribution time : 0.009154 seconds to read 416 bytes in 50 seeks (0.0454446 MBPS)
+[1] Starting graph reading.
+[2] Master distribution time : 0.009073 seconds to read 408 bytes in 49 seeks (0.0449686 MBPS)
+[2] Starting graph reading.
+[0] Master distribution time : 0.008182 seconds to read 208 bytes in 24 seeks (0.0254217 MBPS)
+[0] Starting graph reading.
+DEBUG: [[15:24:06]   0] Loading edge data
+DEBUG: [[15:24:12]   0] Loading edge data
+DEBUG: [[15:24:13]   0] Loading edge data
+[aries1][[51584,1],2][../../../../../../opal/mca/btl/tcp/btl_tcp.c:559:mca_btl_tcp_recv_blocking] recv(21) failed: Connection reset by peer (104)
