@@ -25,7 +25,7 @@ int main(int argc, char **argv)
       "t, threads", "Number of threads", cxxopts::value<size_t>()->default_value("1"))(
       "p, partitioning-scheme", "Partitioning scheme file", cxxopts::value<std::string>())(
       "a, algorithm", "Graph Algorithm", cxxopts::value<std::string>()->default_value("pr"))(
-      "o, offload-mode", "Offload Mode", cxxopts::value<uint32_t>()->default_value("1"))(
+      "o, offload-mode", "Offload Mode", cxxopts::value<uint32_t>())(
       "max-iterations", "Maximum number of iterations", cxxopts::value<uint32_t>()->default_value("1000"))(
       "h, help", "Print usage");
 
@@ -101,6 +101,10 @@ int main(int argc, char **argv)
     if (result.count("offload-mode"))
     {
       offload_mode = result["offload-mode"].as<uint32_t>();
+    } 
+    else
+    {
+      offload_mode = 1;
     }
 
     if (result.count("max-iterations"))

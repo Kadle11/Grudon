@@ -210,9 +210,12 @@ void GraphAlgorithm<VertexProperty>::run(uint32_t &offload_mode, uint32_t &max_i
   uint32_t iteration = 0;
   size_t VertexProperty_size = sizeof(VertexProperty);
 
-  size_t ndp_offload_threshold =
-      (worker->num_vertices / 5) * (VertexProperty_size / sizeof(GNode)) * worker->distributed_graph->replication_factor;
-  uint64_t inc_offload_threshold = worker->num_vertices / worker->distributed_graph->replication_factor;
+  double replication_factor =
+      worker->distributed_graph->replication_factor > 0 ? worker->distributed_graph->replication_factor : 1.0;
+
+  size_t ndp_offload_threshold = (worker->num_vertices / 5) * (VertexProperty_size / sizeof(GNode)) * replication_factor;
+  size_t n_threshold = (worker->num_edges/worker->num_vertices) * (VertexProperty_size / sizeof(GNode)) * replication_factor;
+  uint64_t inc_offload_threshold = worker->num_vertices / replication_factor;
 
   spdlog::info(
       "[Proc {}] NV:{}, RF:{}, NDP Offload Threshold: {}",
@@ -269,13 +272,15 @@ void GraphAlgorithm<VertexProperty>::run(uint32_t &offload_mode, uint32_t &max_i
             worker->coverage_vector,
             worker->out_degrees,
             ndp_offload_threshold,
+            n_threshold,
             num_memory,
             num_compute,
             offload_coeff,
             fetch_coeff,
             decision_coeff,
             neighbor_count,
-            frontier_size);
+            frontier_size,
+            worker->num_edges);
       }
 
       if (memory_offload == NDP_OFFLOAD)
@@ -289,12 +294,12 @@ void GraphAlgorithm<VertexProperty>::run(uint32_t &offload_mode, uint32_t &max_i
     net.allReduce(&memory_offload, &ndp_decision, 1, MPI_UINT32_T, MPI_MIN);
     net.allReduce(&switch_offload, &inc_decision, 1, MPI_UINT32_T, MPI_MIN);
 
-    // spdlog::info(
-    //     "[Proc {}/{}] NDP Offload: {}, INC Offload: {}",
-    //     worker->node_id,
-    //     iteration,
-    //     OFFLOAD_DECISION_STR[ndp_decision],
-    //     OFFLOAD_DECISION_STR[inc_decision]);
+    spdlog::info(
+        "[Proc {}/{}] NDP Offload: {}, INC Offload: {}",
+        worker->node_id,
+        iteration,
+        OFFLOAD_DECISION_STR[ndp_decision],
+        OFFLOAD_DECISION_STR[inc_decision]);
 
     // Send the Frontier to all Traversers
     if (node_type == COMPUTE_NODE)
