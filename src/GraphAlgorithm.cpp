@@ -242,6 +242,9 @@ void GraphAlgorithm<VertexProperty>::run(uint32_t &offload_mode, uint32_t &max_i
   galois::StatTimer cPhase2_timer;
   galois::StatTimer idle_timer;
 
+  galois::StatTimer naive_agg_timer;
+  galois::StatTimer inc_agg_timer;
+
   std::vector<GNode> current_frontier;
 
   timer.start();
@@ -265,7 +268,7 @@ void GraphAlgorithm<VertexProperty>::run(uint32_t &offload_mode, uint32_t &max_i
     {
       current_frontier = this->frontier.getOffsets();
 
-      if (offload_mode != 2)
+      if (offload_mode == 1)
       {
         memory_offload = NDPEngine(
             current_frontier,
@@ -285,14 +288,14 @@ void GraphAlgorithm<VertexProperty>::run(uint32_t &offload_mode, uint32_t &max_i
 
       if (memory_offload == NDP_OFFLOAD)
       {
-        // switch_offload =
-        //     INCEngine(current_frontier, worker->out_degrees, *worker->distributed_graph, inc_offload_threshold,
-        //     num_memory);
+        switch_offload =
+            INCEngine(current_frontier, worker->out_degrees, *worker->distributed_graph, inc_offload_threshold,
+            num_memory);
       }
     }
 
     net.allReduce(&memory_offload, &ndp_decision, 1, MPI_UINT32_T, MPI_MIN);
-    net.allReduce(&switch_offload, &inc_decision, 1, MPI_UINT32_T, MPI_MIN);
+    // net.allReduce(&switch_offload, &inc_decision, 1, MPI_UINT32_T, MPI_MIN);
 
     spdlog::info(
         "[Proc {}/{}] NDP Offload: {}, INC Offload: {}",
@@ -849,6 +852,12 @@ void GraphAlgorithm<VertexProperty>::run(uint32_t &offload_mode, uint32_t &max_i
 
             uNeighbors += nVertices;
 
+           naive_agg_timer.start();
+           if (switch_offload == INC_OFFLOAD)   
+           {
+             inc_agg_timer.start();
+           }
+
             galois::do_all(
                 galois::iterate(0ul, nGaloisThreads),
                 [&](const size_t tid)
@@ -869,6 +878,12 @@ void GraphAlgorithm<VertexProperty>::run(uint32_t &offload_mode, uint32_t &max_i
                 galois::loopname("Aggregate Property Vertices"),
                 galois::no_stats(),
                 galois::steal());
+
+            if (switch_offload == INC_OFFLOAD)
+            {
+              inc_agg_timer.stop();
+            }
+            naive_agg_timer.stop();
 
             // spdlog::info(
             //     "[Proc {}] Updated Vertices: {}", this->worker->node_id, fmt_array(vertex_updates.getUpdatedVertices()));
@@ -1084,6 +1099,9 @@ void GraphAlgorithm<VertexProperty>::run(uint32_t &offload_mode, uint32_t &max_i
     galois::runtime::reportStat_Single(algorithm_name, "Iterations", iteration);
     galois::runtime::reportStat_Single(algorithm_name, "TotalBytesMoved", total_bytes);
     galois::runtime::reportStat_Single(algorithm_name, "Timer_0", timer.get());
+
+    galois::runtime::reportStat_Single(algorithm_name, "NaiveAggTimer", naive_agg_timer.get());
+    galois::runtime::reportStat_Single(algorithm_name, "IncAggTimer", inc_agg_timer.get());
   }
 
   galois::runtime::reportStat_Single(algorithm_name, "TraversalTimer", traversal_timer.get());

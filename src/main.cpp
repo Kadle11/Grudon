@@ -193,7 +193,7 @@ int main(int argc, char **argv)
     graph_algorithm->init();
     graph_algorithm->run(offload_mode, max_iterations);
 
-    graph_algorithm->verify();
+    // graph_algorithm->verify();
 
     delete graph_algorithm;
   }

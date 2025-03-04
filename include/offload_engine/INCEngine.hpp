@@ -15,9 +15,9 @@ OFFLOAD_DECISION INCEngine(
     uint32_t& num_memory)
 {
   size_t offload_factor = frontier.size();
-  for (const GNode& lid : frontier)
+  if (offload_factor < offload_threshold)
   {
-    offload_factor += out_degrees[lid];
+    return NO_OFFLOAD;
   }
 
   if (offload_factor < offload_threshold)
@@ -28,7 +28,7 @@ OFFLOAD_DECISION INCEngine(
   double skewness = calculateSkew(frontier, num_memory, distributed_graph);
   spdlog::info("Skewness: {}", skewness);
 
-  if (skewness > -3 && skewness < 3)
+  if (skewness > -1 && skewness < 1)
   {
     return INC_OFFLOAD;
   }

@@ -25,5 +25,5 @@ $4 ~ /Timer_0/ {
     runtime = $6 
 }
 END {
-    print max_traversal + max_update, max_cphase + 0, runtime + 0
+    print runtime + 0, max_update + 0, max_traversal + 0
 }' "$file"
