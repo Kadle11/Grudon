@@ -151,6 +151,7 @@ DistributedGraph::DistributedGraph(
   {
     coverage_vector.allocateLocal(num_vertices);
     out_degrees.allocateLocal(num_vertices);
+    unique_mirrors_traversed.allocateLocal(num_vertices);
   }
 
   // MPI data type for vertexEdgeCount
@@ -297,10 +298,13 @@ DistributedGraph::DistributedGraph(
     // Create Coverage Vectors and OutDegree Vectors
     std::vector<galois::LargeArray<bool>> coverage_vectors(num_compute);
     std::vector<galois::LargeArray<uint64_t>> out_degree_vectors(num_compute);
+    std::vector<galois::LargeArray<float>> unique_mirrors_vectors(num_compute);
+
     for (int i = 0; i < num_compute; i++)
     {
       coverage_vectors[i].allocateLocal(master_partition_sizes[i]);
       out_degree_vectors[i].allocateLocal(master_partition_sizes[i]);
+      unique_mirrors_vectors[i].allocateLocal(master_partition_sizes[i]);
     }
 
     // Initialize the Coverage Vector and Out Degree Vector
@@ -308,18 +312,30 @@ DistributedGraph::DistributedGraph(
         galois::iterate(uint64_t(0), num_vertices),
         [&](uint64_t n)
         {
-          coverage_vector[n] = true;
-          out_degrees[n] = 0;
-
-          for (int i = 1; i < num_compute; i++)
+          uint64_t curMaster = master_partition[n];
+          GNode lid;
+          
+          if (curMaster == 0)
           {
-            coverage_vectors[i][n] = true;
-            out_degree_vectors[i][n] = 0;
+            lid = gid_to_lid[n];
+            coverage_vector[lid] = true;
+            out_degrees[lid] = std::distance(bgraph.edge_begin(n), bgraph.edge_end(n));
+            unique_mirrors_traversed[lid] = 0;
           }
+          else
+          {
+            lid = gid_to_lids[curMaster][n];
+            out_degree_vectors[curMaster][lid] = std::distance(bgraph.edge_begin(n), bgraph.edge_end(n));
+            coverage_vectors[curMaster][lid] = true;
+            unique_mirrors_vectors[curMaster][lid] = 0;
+          }          
         },
         galois::loopname("Initialize Coverage Vector and Out Degree Vector"));
 
+
     galois::substrate::SimpleLock local_lock;
+    galois::substrate::SimpleLock property_lock;
+
     for (int i = 0; i < num_memory; i++)
     {
       cross_node_mirrors[i].resize(total_vertices);
@@ -327,6 +343,8 @@ DistributedGraph::DistributedGraph(
 
     galois::GAccumulator<uint64_t> total_cross_node_mirrors;
     total_cross_node_mirrors.reset();
+
+    
 
     galois::do_all(
         galois::iterate(bgraph),
@@ -342,17 +360,29 @@ DistributedGraph::DistributedGraph(
           if (curMaster == 0)
           {
             lid = gid_to_lid[n];
-            out_degrees[lid] = std::distance(ei, ee);
+            float dstOutDegree = 0;
 
             for (; ei != ee; ++ei)
             {
               GNode dst = bgraph.getEdgeDst(ei);
-              if (coverage_vector[lid] == false && master_partition[dst] != curMaster)
+              uint64_t dstMaster = master_partition[dst];
+
+              if (coverage_vector[lid] && dstMaster != curMaster) {
+                  local_lock.lock();
+                  coverage_vector[lid] = false;
+                  local_lock.unlock();
+
+                  uint64_t dstLocalId = gid_to_lids[dstMaster][dst];
+                  dstOutDegree = out_degree_vectors[dstMaster][dstLocalId];
+              } else if (dstMaster == curMaster)
               {
-                local_lock.lock();
-                coverage_vector[lid] = false;
-                local_lock.unlock();
+                lid = gid_to_lid[dst];
+                dstOutDegree = out_degrees[lid];
               }
+
+              property_lock.lock();
+              unique_mirrors_traversed[lid] += 1.0f / dstOutDegree;
+              property_lock.unlock();
 
               if (mirror_partition[dst] != curMirror)
               {
@@ -364,16 +394,29 @@ DistributedGraph::DistributedGraph(
           else
           {
             lid = gid_to_lids[curMaster][n];
-            out_degree_vectors[curMaster][lid] = std::distance(ei, ee);
-
             for (; ei != ee; ++ei)
             {
+
               GNode dst = bgraph.getEdgeDst(ei);
-              if (coverage_vectors[curMaster][lid] == false && master_partition[dst] != curMaster)
+              uint64_t dstMaster = master_partition[dst];
+              if (coverage_vectors[curMaster][lid] && dstMaster != curMaster)
               {
                 lock.lock();
                 coverage_vectors[curMaster][lid] = false;
                 lock.unlock();
+              }
+              
+              if(dstMaster == 0)
+              {
+                uint64_t dstLid = gid_to_lid[dst];
+                float dstOutDegree = out_degrees[dstLid];
+                unique_mirrors_vectors[curMaster][lid] += 1.0f / dstOutDegree;
+              } 
+              else 
+              {
+                uint64_t dstLocalId = gid_to_lids[dstMaster][dst]; 
+                float dstOutDegree = out_degree_vectors[dstMaster][dstLocalId];
+                unique_mirrors_vectors[curMaster][lid] += 1.0f / dstOutDegree;
               }
 
               if (mirror_partition[dst] != curMirror)
@@ -385,6 +428,9 @@ DistributedGraph::DistributedGraph(
           }
         },
         galois::loopname("Coverage Vector and Out Degree Vector"));
+
+    
+    isHub.resize(0);
 
     spdlog::debug(
         "[Proc {}] Coverage vector: {}, Out Degree vector: {}", node_id, fmt_array(coverage_vector), fmt_array(out_degrees));

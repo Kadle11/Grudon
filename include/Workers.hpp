@@ -36,6 +36,9 @@ class Worker
 
   std::vector<galois::DynamicBitSet> bitCommVector_Send;
   std::vector<galois::DynamicBitSet> bitCommVector_Recv;
+  uint64_t sbvSize;
+  uint64_t rbvSize;
+
   std::vector<std::vector<GNode>> sTranslationTable;
   std::vector<std::vector<GNode>> rTranslationTable;
   std::vector<std::unordered_map<GNode, GNode>> sAggrTranslationTable;
@@ -99,6 +102,8 @@ class UpdateWorker : public Worker<T>
   ~UpdateWorker();
 
   AggregateWorker<T> aggregator_worker;  // Public object of type AggregateWorker
+
+  void setRbvSize_AggWorker(uint64_t rbvSize);
 
  private:
   inline void update(GraphAlgorithm<T>& algorithm) override;

@@ -276,6 +276,14 @@ class DistributedGraph
   std::vector<uint64_t> mirror_partition_sizes;
   Graph bgraph;
 
+  // Tracking Unique Neighbors for Aggregation
+  galois::LargeArray<float> unique_mirrors_traversed;
+  galois::LargeArray<float> mirrors_traversed;
+
+  // Hub Tracking for NDP Offload
+  galois::LargeArray<uint64_t> hubs_traversed;
+  galois::DynamicBitSet isHub;
+  
   std::vector<galois::DynamicBitSet>& bitCommVector_Send;
   std::vector<galois::DynamicBitSet>& bitCommVector_Recv;
   std::vector<std::vector<GNode>>& sTranslationTable;
