@@ -48,10 +48,7 @@ OFFLOAD_DECISION NDPEngine(
 
   galois::do_all(
       galois::iterate(frontier.begin(), frontier.end()),
-      [&](const GNode& lid)
-      {
-        neighbor_accum += out_degrees[lid];
-      },
+      [&](const GNode& lid) { neighbor_accum += out_degrees[lid]; },
       galois::loopname("Calculate Neighbor Accumulator"),
       galois::no_stats(),
       galois::steal());
@@ -65,13 +62,12 @@ OFFLOAD_DECISION NDPEngine(
 
   if (abs_decision_coeff > n_ratio)
   {
-      decision_coeff = 0;
+    decision_coeff = 0;
   }
   else
   {
-      decision_coeff += 0.7 * offload_coeff - 0.5 * fetch_coeff;
+    decision_coeff += FETCH_COEFFICIENT * offload_coeff - OFFLOAD_COEFFICIENT * fetch_coeff;
   }
-
 
   spdlog::info(
       "[Proc 0] Frontier Size: {}, Decision Coefficient: {}/{}/{}",

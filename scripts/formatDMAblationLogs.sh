@@ -7,7 +7,6 @@ LOG_DIR="$GROUDON_HOME/logs/ablation_dm_runs"
 PARTITIONS_DIR="/nethome/vrao79/galois-graphs/partitions"
 RUN_SCRIPTS_DIR="$GROUDON_HOME/scripts"
 
-
 GRAPH_PATH=$1
 ALGORITHM=$2
 NUM_PARTITIONS=$3

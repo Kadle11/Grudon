@@ -259,7 +259,7 @@ std::vector<std::pair<galois::DynamicBitSet, galois::LargeArray<T>>> AggregateWo
     in_bytes += aggregateBitCommVector.size_bytes() * sizeof(uint64_t) + elem_bytes;
     no_agg_bytes += elem_bytes;
 
-    this->net.decrementBytesMoved(bytes_recv);
+    this->net.decrementBytesMoved(2 * bytes_recv + elem_bytes); // M2S and S2C Tracked!
     this->net.incrementBytesMoved(aggregateBitCommVector.size_bytes() * sizeof(uint64_t));
 
     size_t bitCommVectorSize = this->bitCommVector_Recv[i].size();

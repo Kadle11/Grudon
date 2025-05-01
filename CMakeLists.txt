@@ -10,6 +10,20 @@ project(
   LANGUAGES CXX
 )
 
+option(FETCH_COEFFICIENT "Fetch coefficient" OFF)
+option(OFFLOAD_COEFFICIENT "Offload coefficient" OFF)
+
+if (FETCH_COEFFICIENT)
+  message(STATUS "Fetching coefficient from ${FETCH_COEFFICIENT}")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DFETCH_COEFFICIENT=${FETCH_COEFFICIENT}")
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DFETCH_COEFFICIENT=${FETCH_COEFFICIENT}")
+endif()
+
+if (OFFLOAD_COEFFICIENT)
+  message(STATUS "Offloading coefficient from ${OFFLOAD_COEFFICIENT}")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DOFFLOAD_COEFFICIENT=${OFFLOAD_COEFFICIENT}")
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DOFFLOAD_COEFFICIENT=${OFFLOAD_COEFFICIENT}")
+endif()
 
 #
 # Set project options
@@ -167,7 +181,7 @@ include(cmake/Doxygen.cmake)
 #
 
 
-# Remove Warnings for Executable
+# Remove Warnings for Executablesh
 target_compile_options(${PROJECT_NAME} PRIVATE -w)
 
 # Add MPI

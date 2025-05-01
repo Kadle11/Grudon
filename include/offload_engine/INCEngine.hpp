@@ -8,8 +8,8 @@
 #include "Logger.hpp"
 
 #define COMPUTE_TO_MEM_BW    64424509440.0f  // Bytes/Sec
-#define HOST_COMPUTE_POWER   256e9           // 256 GOps
-#define SWITCH_COMPUTE_RATIO 1 / 50
+#define HOST_COMPUTE_POWER   210e9           // 210 GOps
+#define SWITCH_COMPUTE_RATIO 1 / 25
 #define VPROP_SIZE           4  // UINT32, Float
 
 // TODO: Are Galois Primitives faster than Std Primitives?

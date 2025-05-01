@@ -285,16 +285,16 @@ void GraphAlgorithm<VertexProperty>::run(uint32_t &offload_mode, uint32_t &max_i
       }
 
       // memory_offload = NDP_OFFLOAD;  // TODO: Remove
-      if (memory_offload == NDP_OFFLOAD)
-      {
-        switch_offload = INCEngine(
-            current_frontier,
-            worker->out_degrees,
-            *worker->distributed_graph,
-            replication_factor,
-            num_memory,
-            worker->rbvSize);
-      }
+      // if (memory_offload == NDP_OFFLOAD)
+      // {
+      //   switch_offload = INCEngine(
+      //       current_frontier,
+      //       worker->out_degrees,
+      //       *worker->distributed_graph,
+      //       replication_factor,
+      //       num_memory,
+      //       worker->rbvSize);
+      // }
     }
 
     net.allReduce(&memory_offload, &ndp_decision, 1, MPI_UINT32_T, MPI_MIN);
@@ -438,6 +438,8 @@ void GraphAlgorithm<VertexProperty>::run(uint32_t &offload_mode, uint32_t &max_i
               MPI_VERTEX_PROPERTY_T,
               &statuses[i],
               &data_requests[i]);
+
+            
 
           // size_t bitCommVectorSize = worker->bitCommVector[i].size();
           // for (size_t j = 0; j < bitCommVectorSize; j++)
@@ -831,6 +833,8 @@ void GraphAlgorithm<VertexProperty>::run(uint32_t &offload_mode, uint32_t &max_i
                 &statuses[i],
                 &data_requests[i]);
 
+            // this->net.incrementBytesMoved(bytes_recv);
+
             size_t bitCommVectorSize = worker->bitCommVector_Recv[i].size();
             const std::vector<GNode> updated_property_vertices = worker->bitCommVector_Recv[i].getOffsets();
             const size_t &nVertices = updated_property_vertices.size();
@@ -953,7 +957,7 @@ void GraphAlgorithm<VertexProperty>::run(uint32_t &offload_mode, uint32_t &max_i
                 for (size_t k = 1; k < worker->out_degrees[src] + 1; k++)
                 {
                   GNode l_dst = worker->distributed_graph->getLocalNode(eBuffer[k]);
-                  vertex_updates.addUpdate(l_dst, vertex_properties[src]);
+                  // vertex_updates.addUpdate(l_dst, vertex_properties[src]);
                   // vertex_updates.minUpdate(l_dst, vertex_properties[src]);
                 }
               }
@@ -1071,4 +1075,9 @@ void GraphAlgorithm<VertexProperty>::run(uint32_t &offload_mode, uint32_t &max_i
   galois::runtime::reportStat_Single(algorithm_name, "UpdateTimer", update_timer.get());
   galois::runtime::reportStat_Single(algorithm_name, "CPhase1Timer", cPhase1_timer.get());
   galois::runtime::reportStat_Single(algorithm_name, "CPhase2Timer", cPhase2_timer.get());
+
+  galois::runtime::reportStat_Single(
+      algorithm_name, "OffloadCoefficient", OFFLOAD_COEFFICIENT);
+  galois::runtime::reportStat_Single(
+      algorithm_name, "FetchCoefficient", FETCH_COEFFICIENT);
 }

@@ -3,7 +3,7 @@
 GALOIS_HOME="/nethome/vrao79/Groudon/extern/Galois/build/lonestar/analytics/distributed"
 GROUDON_HOME="/nethome/vrao79/Groudon"
 GROUDON_BIN="$GROUDON_HOME/build/bin/Debug/Groudon"
-LOG_DIR="$GROUDON_HOME/logs/ablation_dm_runs"
+LOG_DIR="$GROUDON_HOME/logs/agg_dm_inc_runs"
 PARTITIONS_DIR="/nethome/vrao79/galois-graphs/partitions"
 RUN_SCRIPTS_DIR="$GROUDON_HOME/scripts"
 

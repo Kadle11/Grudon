@@ -9,6 +9,14 @@
 
 #define MAX_ITERATIONS 1000
 
+#ifndef OFFLOAD_COEFFICIENT
+#define OFFLOAD_COEFFICIENT 0.5
+#endif
+
+#ifndef FETCH_COEFFICIENT
+#define FETCH_COEFFICIENT 0.7
+#endif
+
 template<typename VertexProperty>
 class Worker;
 
