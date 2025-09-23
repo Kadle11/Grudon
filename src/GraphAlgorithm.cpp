@@ -300,7 +300,7 @@ void GraphAlgorithm<VertexProperty>::run(uint32_t &offload_mode, uint32_t &max_i
     net.allReduce(&memory_offload, &ndp_decision, 1, MPI_UINT32_T, MPI_MIN);
     net.allReduce(&switch_offload, &inc_decision, 1, MPI_UINT32_T, MPI_MIN);
 
-    // ndp_decision = NDP_OFFLOAD;
+    ndp_decision = NDP_OFFLOAD;
     inc_decision = NO_OFFLOAD;
 
     spdlog::info(
@@ -957,7 +957,7 @@ void GraphAlgorithm<VertexProperty>::run(uint32_t &offload_mode, uint32_t &max_i
                 for (size_t k = 1; k < worker->out_degrees[src] + 1; k++)
                 {
                   GNode l_dst = worker->distributed_graph->getLocalNode(eBuffer[k]);
-                  // vertex_updates.addUpdate(l_dst, vertex_properties[src]);
+                  vertex_updates.addUpdate(l_dst, vertex_properties[src]);
                   // vertex_updates.minUpdate(l_dst, vertex_properties[src]);
                 }
               }

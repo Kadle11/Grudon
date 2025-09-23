@@ -65,8 +65,8 @@ function reset_hugepage_allocation {
 cd $EMULATION_SCRIPTS
 sudo ./disagg_NDP.sh
 
-for x in $(seq -1 0.5 3); do
-  for y in $(seq -1.2 0.5 3.2); do
+for x in $(seq 0.1 0.4 1.5); do
+  for y in $(seq 0.3 0.4 1.7); do
     echo "Building with X=$x and Y=$y"
 
     # Convert to macro-compatible format (e.g., 0.5 -> 0_5, -1.2 -> -1_2)
@@ -96,7 +96,7 @@ for x in $(seq -1 0.5 3); do
         do
             LOG_SUFFIX="$LOG_PREFIX"_run$i.log
             reset_hugepage_allocation
-            GALOIS_DO_NOT_BIND_THREADS=1 time mpirun -n 4 --rankfile $RUN_SCRIPTS_DIR/groudon_proc_map --use-hwthread-cpus --report-bindings $GROUDON_BIN -g $GRAPH_PATH -c 1 -m 3 -t $MEMORY_NODE_LCORES -a pr -o 0 2>&1 | tee $LOG_DIR/pr_$LOG_SUFFIX;
+            GALOIS_DO_NOT_BIND_THREADS=1 time mpirun -n 4 --rankfile $RUN_SCRIPTS_DIR/groudon_proc_map --use-hwthread-cpus --report-bindings $GROUDON_BIN -g $GRAPH_PATH -c 1 -m 3 -t $MEMORY_NODE_LCORES -a pr -o 1 2>&1 | tee $LOG_DIR/pr_$LOG_SUFFIX;
             # reset_hugepage_allocation
             # GALOIS_DO_NOT_BIND_THREADS=1 time mpirun -n 4 --rankfile $RUN_SCRIPTS_DIR/groudon_proc_map --use-hwthread-cpus --report-bindings $GROUDON_BIN -g $SYM_GRAPH_PATH -c 1 -m 3 -t $MEMORY_NODE_LCORES -a cc  2>&1 | tee $LOG_DIR/cc_$LOG_SUFFIX;
             # reset_hugepage_allocation
@@ -107,7 +107,7 @@ for x in $(seq -1 0.5 3); do
         do
             LOG_SUFFIX="$LOG_PREFIX"_run$i.log
             reset_hugepage_allocation
-            GALOIS_DO_NOT_BIND_THREADS=1 time mpirun -n 4 --rankfile $RUN_SCRIPTS_DIR/groudon_proc_map --use-hwthread-cpus --report-bindings $GROUDON_BIN -g $GRAPH_PATH -c 1 -m 3 -t $MEMORY_NODE_LCORES -a pr -p $PARTITION_PATH -o 0 2>&1 | tee $LOG_DIR/pr_$LOG_SUFFIX;
+            GALOIS_DO_NOT_BIND_THREADS=1 time mpirun -n 4 --rankfile $RUN_SCRIPTS_DIR/groudon_proc_map --use-hwthread-cpus --report-bindings $GROUDON_BIN -g $GRAPH_PATH -c 1 -m 3 -t $MEMORY_NODE_LCORES -a pr -p $PARTITION_PATH -o 1 2>&1 | tee $LOG_DIR/pr_$LOG_SUFFIX;
             # reset_hugepage_allocation
             # GALOIS_DO_NOT_BIND_THREADS=1 time mpirun -n 4 --rankfile $RUN_SCRIPTS_DIR/groudon_proc_map --use-hwthread-cpus --report-bindings $GROUDON_BIN -g $SYM_GRAPH_PATH -c 1 -m 3 -t $MEMORY_NODE_LCORES -a cc -p $PARTITION_PATH 2>&1 | tee $LOG_DIR/cc_$LOG_SUFFIX;
             # reset_hugepage_allocation

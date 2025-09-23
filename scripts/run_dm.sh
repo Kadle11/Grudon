@@ -76,19 +76,19 @@ function reset_hugepage_allocation {
 if [ ! -f $PARTITION_PATH ]; then
     LOG_SUFFIX=GroudonNaiveNDP_"$GRAPH_NAME"_"$NUM_PARTITIONS"N.log
     reset_hugepage_allocation
-    GALOIS_DO_NOT_BIND_THREADS=1 time mpirun -n $NUM_PROCS --map-by socket:PE=5 --use-hwthread-cpus --report-bindings $GROUDON_ADDBIN -g $GRAPH_PATH -c 1 -m $NUM_PARTITIONS -t 20 -a pr -o 0 2>&1 | tee $LOG_DIR/pr_$LOG_SUFFIX;
+    GALOIS_DO_NOT_BIND_THREADS=1 time mpirun -n $NUM_PROCS --map-by socket:PE=20 --use-hwthread-cpus --report-bindings $GROUDON_ADDBIN -g $GRAPH_PATH -c 1 -m $NUM_PARTITIONS -t 20 -a pr -o 0 --max-iterations=20 2>&1 | tee $LOG_DIR/pr_$LOG_SUFFIX;
     reset_hugepage_allocation
-    GALOIS_DO_NOT_BIND_THREADS=1 time mpirun -n $NUM_PROCS --map-by socket:PE=5 --use-hwthread-cpus --report-bindings $GROUDON_MINBIN -g $SYM_GRAPH_PATH -c 1 -m $NUM_PARTITIONS -t 20 -a cc -o 0 2>&1 | tee $LOG_DIR/cc_$LOG_SUFFIX;
+    GALOIS_DO_NOT_BIND_THREADS=1 time mpirun -n $NUM_PROCS --map-by socket:PE=20 --use-hwthread-cpus --report-bindings $GROUDON_MINBIN -g $SYM_GRAPH_PATH -c 1 -m $NUM_PARTITIONS -t 20 -a cc -o 0 2>&1 | tee $LOG_DIR/cc_$LOG_SUFFIX;
     reset_hugepage_allocation
-    GALOIS_DO_NOT_BIND_THREADS=1 time mpirun -n $NUM_PROCS --map-by socket:PE=5 --use-hwthread-cpus --report-bindings $GROUDON_MINBIN -g $GRAPH_PATH -c 1 -m $NUM_PARTITIONS -t 20 -a sssp -o 0 2>&1 | tee $LOG_DIR/sssp_$LOG_SUFFIX;
+    GALOIS_DO_NOT_BIND_THREADS=1 time mpirun -n $NUM_PROCS --map-by socket:PE=20 --use-hwthread-cpus --report-bindings $GROUDON_MINBIN -g $GRAPH_PATH -c 1 -m $NUM_PARTITIONS -t 20 -a sssp -o 0 2>&1 | tee $LOG_DIR/sssp_$LOG_SUFFIX;
 else
     LOG_SUFFIX=GroudonNaiveNDP_"$GRAPH_NAME"_"$NUM_PARTITIONS"N.log
     reset_hugepage_allocation
-    GALOIS_DO_NOT_BIND_THREADS=1 time mpirun -n $NUM_PROCS --map-by socket:PE=5 --use-hwthread-cpus --report-bindings $GROUDON_ADDBIN -g $GRAPH_PATH -c 1 -m $NUM_PARTITIONS -t 20 -a pr -p $PARTITION_PATH -o 0 2>&1 | tee $LOG_DIR/pr_$LOG_SUFFIX;
+    GALOIS_DO_NOT_BIND_THREADS=1 time mpirun -n $NUM_PROCS --map-by socket:PE=20 --use-hwthread-cpus --report-bindings $GROUDON_ADDBIN -g $GRAPH_PATH -c 1 -m $NUM_PARTITIONS -t 20 -a pr -p $PARTITION_PATH -o 0 2>&1 | tee $LOG_DIR/pr_$LOG_SUFFIX;
     reset_hugepage_allocation
-    GALOIS_DO_NOT_BIND_THREADS=1 time mpirun -n $NUM_PROCS --map-by socket:PE=5 --use-hwthread-cpus --report-bindings $GROUDON_MINBIN -g $SYM_GRAPH_PATH -c 1 -m $NUM_PARTITIONS -t 20 -a cc -p $PARTITION_PATH -o 0 2>&1 | tee $LOG_DIR/cc_$LOG_SUFFIX;
+    GALOIS_DO_NOT_BIND_THREADS=1 time mpirun -n $NUM_PROCS --map-by socket:PE=20 --use-hwthread-cpus --report-bindings $GROUDON_MINBIN -g $SYM_GRAPH_PATH -c 1 -m $NUM_PARTITIONS -t 20 -a cc -p $PARTITION_PATH -o 0 2>&1 | tee $LOG_DIR/cc_$LOG_SUFFIX;
     reset_hugepage_allocation
-    GALOIS_DO_NOT_BIND_THREADS=1 time mpirun -n $NUM_PROCS --map-by socket:PE=5 --use-hwthread-cpus --report-bindings $GROUDON_MINBIN -g $GRAPH_PATH -c 1 -m $NUM_PARTITIONS -t 20 -a sssp -p $PARTITION_PATH -o 0 2>&1 | tee $LOG_DIR/sssp_$LOG_SUFFIX;
+    GALOIS_DO_NOT_BIND_THREADS=1 time mpirun -n $NUM_PROCS --map-by socket:PE=20 --use-hwthread-cpus --report-bindings $GROUDON_MINBIN -g $GRAPH_PATH -c 1 -m $NUM_PARTITIONS -t 20 -a sssp -p $PARTITION_PATH -o 0 2>&1 | tee $LOG_DIR/sssp_$LOG_SUFFIX;
 fi
 
 
@@ -97,36 +97,36 @@ fi
 if [ ! -f $PARTITION_PATH ]; then
     LOG_SUFFIX=GroudonNDP_"$GRAPH_NAME"_"$NUM_PARTITIONS"N.log
     reset_hugepage_allocation
-    GALOIS_DO_NOT_BIND_THREADS=1 time mpirun -n $NUM_PROCS --map-by socket:PE=5 --use-hwthread-cpus --report-bindings $GROUDON_ADDBIN -g $GRAPH_PATH -c 1 -m $NUM_PARTITIONS -t 20 -a pr  2>&1 | tee $LOG_DIR/pr_$LOG_SUFFIX;
+    GALOIS_DO_NOT_BIND_THREADS=1 time mpirun -n $NUM_PROCS --map-by socket:PE=20 --use-hwthread-cpus --report-bindings $GROUDON_ADDBIN -g $GRAPH_PATH -c 1 -m $NUM_PARTITIONS -t 20 -a pr  2>&1 | tee $LOG_DIR/pr_$LOG_SUFFIX;
     reset_hugepage_allocation
-    GALOIS_DO_NOT_BIND_THREADS=1 time mpirun -n $NUM_PROCS --map-by socket:PE=5 --use-hwthread-cpus --report-bindings $GROUDON_MINBIN -g $SYM_GRAPH_PATH -c 1 -m $NUM_PARTITIONS -t 20 -a cc  2>&1 | tee $LOG_DIR/cc_$LOG_SUFFIX;
+    GALOIS_DO_NOT_BIND_THREADS=1 time mpirun -n $NUM_PROCS --map-by socket:PE=20 --use-hwthread-cpus --report-bindings $GROUDON_MINBIN -g $SYM_GRAPH_PATH -c 1 -m $NUM_PARTITIONS -t 20 -a cc  2>&1 | tee $LOG_DIR/cc_$LOG_SUFFIX;
     reset_hugepage_allocation
-    GALOIS_DO_NOT_BIND_THREADS=1 time mpirun -n $NUM_PROCS --map-by socket:PE=5 --use-hwthread-cpus --report-bindings $GROUDON_MINBIN -g $GRAPH_PATH -c 1 -m $NUM_PARTITIONS -t 20 -a sssp  2>&1 | tee $LOG_DIR/sssp_$LOG_SUFFIX;
+    GALOIS_DO_NOT_BIND_THREADS=1 time mpirun -n $NUM_PROCS --map-by socket:PE=20 --use-hwthread-cpus --report-bindings $GROUDON_MINBIN -g $GRAPH_PATH -c 1 -m $NUM_PARTITIONS -t 20 -a sssp  2>&1 | tee $LOG_DIR/sssp_$LOG_SUFFIX;
 else
     LOG_SUFFIX=GroudonNDP_"$GRAPH_NAME"_"$NUM_PARTITIONS"N.log
     reset_hugepage_allocation
-    GALOIS_DO_NOT_BIND_THREADS=1 time mpirun -n $NUM_PROCS --map-by socket:PE=5 --use-hwthread-cpus --report-bindings $GROUDON_ADDBIN -g $GRAPH_PATH -c 1 -m $NUM_PARTITIONS -t 20 -a pr -p $PARTITION_PATH  2>&1 | tee $LOG_DIR/pr_$LOG_SUFFIX;
+    GALOIS_DO_NOT_BIND_THREADS=1 time mpirun -n $NUM_PROCS --map-by socket:PE=20 --use-hwthread-cpus --report-bindings $GROUDON_ADDBIN -g $GRAPH_PATH -c 1 -m $NUM_PARTITIONS -t 20 -a pr -p $PARTITION_PATH  2>&1 | tee $LOG_DIR/pr_$LOG_SUFFIX;
     reset_hugepage_allocation
-    GALOIS_DO_NOT_BIND_THREADS=1 time mpirun -n $NUM_PROCS --map-by socket:PE=5 --use-hwthread-cpus --report-bindings $GROUDON_MINBIN -g $SYM_GRAPH_PATH -c 1 -m $NUM_PARTITIONS -t 20 -a cc -p $PARTITION_PATH  2>&1 | tee $LOG_DIR/cc_$LOG_SUFFIX;
+    GALOIS_DO_NOT_BIND_THREADS=1 time mpirun -n $NUM_PROCS --map-by socket:PE=20 --use-hwthread-cpus --report-bindings $GROUDON_MINBIN -g $SYM_GRAPH_PATH -c 1 -m $NUM_PARTITIONS -t 20 -a cc -p $PARTITION_PATH  2>&1 | tee $LOG_DIR/cc_$LOG_SUFFIX;
     reset_hugepage_allocation
-    GALOIS_DO_NOT_BIND_THREADS=1 time mpirun -n $NUM_PROCS --map-by socket:PE=5 --use-hwthread-cpus --report-bindings $GROUDON_MINBIN -g $GRAPH_PATH -c 1 -m $NUM_PARTITIONS -t 20 -a sssp -p $PARTITION_PATH  2>&1 | tee $LOG_DIR/sssp_$LOG_SUFFIX;
+    GALOIS_DO_NOT_BIND_THREADS=1 time mpirun -n $NUM_PROCS --map-by socket:PE=20 --use-hwthread-cpus --report-bindings $GROUDON_MINBIN -g $GRAPH_PATH -c 1 -m $NUM_PARTITIONS -t 20 -a sssp -p $PARTITION_PATH  2>&1 | tee $LOG_DIR/sssp_$LOG_SUFFIX;
 fi
 
 # Groudon Runs
 if [ ! -f $PARTITION_PATH ]; then
     LOG_SUFFIX=Groudon_"$GRAPH_NAME"_"$NUM_PARTITIONS"N.log
     reset_hugepage_allocation
-    GALOIS_DO_NOT_BIND_THREADS=1 time mpirun -n $NUM_PROCS --map-by socket:PE=10 --use-hwthread-cpus --report-bindings $GROUDON_ADDAGG -g $GRAPH_PATH -c 1 -m $NUM_PARTITIONS -t 20 -a pr  2>&1 | tee $LOG_DIR/pr_$LOG_SUFFIX;
+    GALOIS_DO_NOT_BIND_THREADS=1 time mpirun -n $NUM_PROCS --map-by socket:PE=20 --use-hwthread-cpus --report-bindings $GROUDON_ADDAGG -g $GRAPH_PATH -c 1 -m $NUM_PARTITIONS -t 20 -a pr  2>&1 | tee $LOG_DIR/pr_$LOG_SUFFIX;
     reset_hugepage_allocation
-    GALOIS_DO_NOT_BIND_THREADS=1 time mpirun -n $NUM_PROCS --map-by socket:PE=10 --use-hwthread-cpus --report-bindings $GROUDON_MINAGG -g $SYM_GRAPH_PATH -c 1 -m $NUM_PARTITIONS -t 20 -a cc  2>&1 | tee $LOG_DIR/cc_$LOG_SUFFIX;
+    GALOIS_DO_NOT_BIND_THREADS=1 time mpirun -n $NUM_PROCS --map-by socket:PE=20 --use-hwthread-cpus --report-bindings $GROUDON_MINAGG -g $SYM_GRAPH_PATH -c 1 -m $NUM_PARTITIONS -t 20 -a cc  2>&1 | tee $LOG_DIR/cc_$LOG_SUFFIX;
     reset_hugepage_allocation
-    GALOIS_DO_NOT_BIND_THREADS=1 time mpirun -n $NUM_PROCS --map-by socket:PE=10 --use-hwthread-cpus --report-bindings $GROUDON_MINAGG -g $GRAPH_PATH -c 1 -m $NUM_PARTITIONS -t 20 -a sssp  2>&1 | tee $LOG_DIR/sssp_$LOG_SUFFIX;
+    GALOIS_DO_NOT_BIND_THREADS=1 time mpirun -n $NUM_PROCS --map-by socket:PE=20 --use-hwthread-cpus --report-bindings $GROUDON_MINAGG -g $GRAPH_PATH -c 1 -m $NUM_PARTITIONS -t 20 -a sssp  2>&1 | tee $LOG_DIR/sssp_$LOG_SUFFIX;
 else
     LOG_SUFFIX=Groudon_"$GRAPH_NAME"_"$NUM_PARTITIONS"N.log
     reset_hugepage_allocation
-    GALOIS_DO_NOT_BIND_THREADS=1 time mpirun -n $NUM_PROCS --map-by socket:PE=10 --use-hwthread-cpus --report-bindings $GROUDON_ADDAGG -g $GRAPH_PATH -c 1 -m $NUM_PARTITIONS -t 20 -a pr -p $PARTITION_PATH   2>&1 | tee $LOG_DIR/pr_$LOG_SUFFIX;
+    GALOIS_DO_NOT_BIND_THREADS=1 time mpirun -n $NUM_PROCS --map-by socket:PE=20 --use-hwthread-cpus --report-bindings $GROUDON_ADDAGG -g $GRAPH_PATH -c 1 -m $NUM_PARTITIONS -t 20 -a pr -p $PARTITION_PATH   2>&1 | tee $LOG_DIR/pr_$LOG_SUFFIX;
     reset_hugepage_allocation
-    GALOIS_DO_NOT_BIND_THREADS=1 time mpirun -n $NUM_PROCS --map-by socket:PE=10 --use-hwthread-cpus --report-bindings $GROUDON_MINAGG -g $SYM_GRAPH_PATH -c 1 -m $NUM_PARTITIONS -t 20 -a cc -p $PARTITION_PATH  2>&1 | tee $LOG_DIR/cc_$LOG_SUFFIX;
+    GALOIS_DO_NOT_BIND_THREADS=1 time mpirun -n $NUM_PROCS --map-by socket:PE=20 --use-hwthread-cpus --report-bindings $GROUDON_MINAGG -g $SYM_GRAPH_PATH -c 1 -m $NUM_PARTITIONS -t 20 -a cc -p $PARTITION_PATH  2>&1 | tee $LOG_DIR/cc_$LOG_SUFFIX;
     reset_hugepage_allocation
-    GALOIS_DO_NOT_BIND_THREADS=1 time mpirun -n $NUM_PROCS --map-by socket:PE=10 --use-hwthread-cpus --report-bindings $GROUDON_MINAGG -g $GRAPH_PATH -c 1 -m $NUM_PARTITIONS -t 20 -a sssp -p $PARTITION_PATH  2>&1 | tee $LOG_DIR/sssp_$LOG_SUFFIX;
+    GALOIS_DO_NOT_BIND_THREADS=1 time mpirun -n $NUM_PROCS --map-by socket:PE=20 --use-hwthread-cpus --report-bindings $GROUDON_MINAGG -g $GRAPH_PATH -c 1 -m $NUM_PARTITIONS -t 20 -a sssp -p $PARTITION_PATH  2>&1 | tee $LOG_DIR/sssp_$LOG_SUFFIX;
 fi
