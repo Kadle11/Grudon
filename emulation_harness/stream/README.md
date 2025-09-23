@@ -1,6 +1,6 @@
 ## STREAM*
 
-This benchmark is a slightly modified version of [https://github.com/host-architecture/understanding-the-host-network/tree/master/stream]() used to inject a configurable amount of memory bandwidth contention in our emulation. It supports different read/write ratios and memory access patterns.
+This benchmark is a slightly modified version of [https://github.com/host-architecture/understanding-the-host-network/tree/master/stream]() and is used to inject a configurable amount of memory bandwidth contention in our emulation. It supports different read/write ratios and memory access patterns.
 
 ### Requirements
 
