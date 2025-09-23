@@ -1,17 +1,13 @@
 ## STREAM*
 
-This is a modified version of the standard STREAM benchmark which supports different read/write ratios and memory access patterns.
+This benchmark is a slightly modified version of [https://github.com/host-architecture/understanding-the-host-network/tree/master/stream]() used to inject a configurable amount of memory bandwidth contention in our emulation. It supports different read/write ratios and memory access patterns.
 
 ### Requirements
 
-The benchmark code currently uses AVX-512 to generate 64 byte load/store instructions, and therefore requires a processor with AVX-512 support. You can check whether your processor provides the necessary support using the following:
+The benchmark code currently uses AVX-512/AVX-2 to generate load/store instructions, and therefore requires a processor with AVX support. You can check whether your processor provides the necessary support using the following:
 ```
-cat /proc/cpuinfo | grep avx512f
+cat /proc/cpuinfo | grep avx
 ```
-
-We have tested STREAM* on the following platforms:
-* Ubuntu 20.04, gcc version 8.4.0, Intel Cascade Lake architecture
-* Ubuntu 22.04, gcc version 11.4.0, Intel Ice Lake architecture
 
 ### Compiling
 
