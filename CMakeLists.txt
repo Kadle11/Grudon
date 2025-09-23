@@ -5,7 +5,7 @@ cmake_minimum_required(VERSION 3.15)
 #
 
 project(
-  Groudon
+  Grudon
   VERSION 0.1.0
   LANGUAGES CXX
 )
@@ -61,8 +61,8 @@ include(cmake/SourcesAndHeaders.cmake)
 
 
 # Add executable for the Partitioner
-add_executable(partitioner tools/mt-metis-partitioner.cpp)  # Add the executable
-target_compile_options(partitioner PRIVATE -std=c99)
+# add_executable(partitioner tools/mt-metis-partitioner.cpp)  # Add the executable
+# target_compile_options(partitioner PRIVATE -std=c99)
 
 
 if(${PROJECT_NAME}_BUILD_EXECUTABLE)
@@ -170,7 +170,7 @@ target_link_libraries(${PROJECT_NAME} PRIVATE MPI::MPI_CXX)
 
 # Add CXXOpts
 target_include_directories(${PROJECT_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/extern/cxxopts/include)
-target_include_directories(partitioner PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/extern/cxxopts/include)
+# target_include_directories(partitioner PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/extern/cxxopts/include)
 
 # Add SpdLog
 target_include_directories(${PROJECT_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/extern/spdlog/include)
@@ -187,23 +187,23 @@ add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/extern/Galois EXCLUDE_FROM_ALL)
 target_include_directories(${PROJECT_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/extern/Galois/include)
 target_link_libraries(${PROJECT_NAME} PRIVATE Galois::shmem)
 
-target_link_libraries(partitioner PRIVATE Galois::shmem)
-target_include_directories(partitioner PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/extern/Galois/include)
+# target_link_libraries(partitioner PRIVATE Galois::shmem)
+# target_include_directories(partitioner PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/extern/Galois/include)
 
 # Add OpenMP
 find_package(OpenMP REQUIRED)
-target_link_libraries(${PROJECT_NAME} PRIVATE OpenMP::OpenMP_CXX)
-target_link_libraries(partitioner PRIVATE OpenMP::OpenMP_CXX)
+# target_link_libraries(${PROJECT_NAME} PRIVATE OpenMP::OpenMP_CXX)
+# target_link_libraries(partitioner PRIVATE OpenMP::OpenMP_CXX)
 
 # Add METIS
-find_library(GKlib NAMES GKlib REQUIRED)
-find_library(METIS NAMES metis REQUIRED)
-find_path(METIS_INCLUDE_DIR metis.h REQUIRED)
-if(NOT METIS)
-  message(FATAL_ERROR "METIS not found")
-else()
-  message(STATUS "Found METIS: ${METIS}, GKlib: ${GKlib}")
-endif()
+# find_library(GKlib NAMES GKlib REQUIRED)
+# find_library(METIS NAMES metis REQUIRED)
+# find_path(METIS_INCLUDE_DIR metis.h REQUIRED)
+# if(NOT METIS)
+#   message(FATAL_ERROR "METIS not found")
+# else()
+#  message(STATUS "Found METIS: ${METIS}, GKlib: ${GKlib}")
+# endif()
 
 # Add LD Flags for METIS
 target_link_libraries(${PROJECT_NAME} PRIVATE ${METIS})
@@ -211,19 +211,19 @@ target_link_libraries(${PROJECT_NAME} PRIVATE ${GKlib})
 target_include_directories(${PROJECT_NAME} PRIVATE ${METIS_INCLUDE_DIR})
 
 # Add MT-Metis
-find_library(WILDRIVER NAMES wildriver REQUIRED)
-find_library(MT_METIS NAMES mtmetis REQUIRED)
-find_path(MT_METIS_INCLUDE_DIR mtmetis.h REQUIRED)
+# find_library(WILDRIVER NAMES wildriver REQUIRED)
+# find_library(MT_METIS NAMES mtmetis REQUIRED)
+# find_path(MT_METIS_INCLUDE_DIR mtmetis.h REQUIRED)
 
-if(NOT MT_METIS)
-  message(FATAL_ERROR "MT-Metis not found")
-else()
-  message(STATUS "Found MT-Metis: ${MT_METIS}, wildriver: ${WILDRIVER}, MT_METIS_INCLUDE_DIR: ${MT_METIS_INCLUDE_DIR}")
-endif()
+# if(NOT MT_METIS)
+#  message(FATAL_ERROR "MT-Metis not found")
+# else()
+#  message(STATUS "Found MT-Metis: ${MT_METIS}, wildriver: ${WILDRIVER}, MT_METIS_INCLUDE_DIR: ${MT_METIS_INCLUDE_DIR}")
+# endif()
 
-target_link_libraries(partitioner PRIVATE ${MT_METIS})
-target_link_libraries(partitioner PRIVATE ${WILDRIVER})
-target_include_directories(partitioner PUBLIC ${MT_METIS_INCLUDE_DIR})
+# target_link_libraries(partitioner PRIVATE ${MT_METIS})
+# target_link_libraries(partitioner PRIVATE ${WILDRIVER})
+# target_include_directories(partitioner PUBLIC ${MT_METIS_INCLUDE_DIR})
 
 # For Windows, it is necessary to link with the MultiThreaded library.
 # Depending on how the rest of the project's dependencies are linked, it might be necessary

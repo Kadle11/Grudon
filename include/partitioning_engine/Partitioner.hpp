@@ -5,7 +5,8 @@
 
 #include "Graph.hpp"
 #include "Logger.hpp"
-#include "metis.h"
+// #include "metis.h"
+typedef int32_t idx_t; // Can comment out if METIS is included
 
 void NaivePartitioner(
     Graph& graph,
@@ -102,6 +103,8 @@ void METISPartitioner(
 
     spdlog::info("Partitioning Scheme Loaded from File: {}", partitioning_scheme_file);
   }
+  /* Uncomment if METIS Support is needed */
+  /*
   else
   {
     std::vector<idx_t> xadj;
@@ -156,7 +159,9 @@ void METISPartitioner(
     {
       spdlog::error("METIS Partitioning Failed\n");
     }
+
   }
+  */
 
   master_partition.allocateLocal(graph.size());
   mirror_partition.allocateLocal(graph.size());
