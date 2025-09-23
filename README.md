@@ -25,6 +25,7 @@ git submodule update --init --recursive
 cd extern/Galois
 git checkout Grudon
 
+# Execute in Grudon Repo ROOT 
 mkdir build && cd build
 cmake .. -DCMAKE_BUILD_TYPE=Debug // Release Build Coming Soon
 make -j$(nproc)
