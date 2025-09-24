@@ -52,6 +52,18 @@ make -j$(nproc)
 mpirun -n 4 --npersocket 1 --map-by NUMA:PE=20 --use-hwthread-cpus --report-bindings ./bin/Debug/Groudon -g $GRAPH_PATH -c 1 -m 3 -t 20 -p $GRAPH_PARTS_FILE -a pr
 ```
 
-# Emulating the DiNDP environment
+## Emulating the DiNDP environment
 Please look at the `emulation_harness` directory for scripts emulate the DiNDP
 environment on a multi-socket system.
+
+---
+For more information please refer to our paper:
+```bib
+@inproceedings{rao2025grudon,
+  title={Grudon: A System for Deploying Graph Workloads on Disaggregated Architectures with Near-Data Processing},
+  author={Rao, Vishal and Shashidhar, Nikhil Ram and Lee, Suyeon and Gavrilovska, Ada},
+  booktitle={Proceedings of the 34th International Symposium on High-Performance Parallel and Distributed Computing},
+  pages={1--14},
+  year={2025}
+}
+```
