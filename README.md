@@ -53,7 +53,7 @@ mpirun -n 4 --npersocket 1 --map-by NUMA:PE=20 --use-hwthread-cpus --report-bind
 ```
 
 ## Emulating the DiNDP environment
-Please look at the `emulation_harness` directory for scripts emulate the DiNDP
+Please look at the `emulation_harness` directory for scripts to emulate the DiNDP
 environment on a multi-socket system.
 
 ---
