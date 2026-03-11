@@ -87,6 +87,7 @@ GraphAlgorithm<VertexProperty>::GraphAlgorithm(
   if (node_type == COMPUTE_NODE)
   {
     nGaloisThreads /= 4;
+    GaloisThreads = nGaloisThreads > 0 ? nGaloisThreads : 1;
     worker = new UpdateWorker<VertexProperty>(graph_path, num_compute, num_memory, node_id, node_type, net, partitioning_scheme_file);
     verticesPerThread = worker->num_vertices / nGaloisThreads > 0 ? worker->num_vertices / nGaloisThreads : 1;
 
