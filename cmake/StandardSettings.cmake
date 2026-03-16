@@ -80,6 +80,8 @@ if(${PROJECT_NAME}_ENABLE_LTO)
   endif()
 endif()
 
+option(${PROJECT_NAME}_ENABLE_PERF_CPP "Enable perf-cpp based profiling instrumentation." ON)
+
 
 option(${PROJECT_NAME}_ENABLE_CCACHE "Enable the usage of Ccache, in order to speed up rebuild times." ON)
 find_program(CCACHE_FOUND ccache)

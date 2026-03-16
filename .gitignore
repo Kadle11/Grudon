@@ -368,3 +368,15 @@ healthchecksdb
 
 # Backup folder for Package Reference Convert tool in Visual Studio 2017
 MigrationBackup/
+
+# Ignore local data and graph folders
+data/
+graphs/
+partitions/
+
+# Ignore mlc files downloaded locally
+emulation_harness/Linux
+emulation_harness/mlc_*
+
+# Ignore metrics files generated on runs
+output/

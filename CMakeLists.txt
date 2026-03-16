@@ -195,6 +195,34 @@ find_package(OpenMP REQUIRED)
 # target_link_libraries(${PROJECT_NAME} PRIVATE OpenMP::OpenMP_CXX)
 # target_link_libraries(partitioner PRIVATE OpenMP::OpenMP_CXX)
 
+if(${PROJECT_NAME}_ENABLE_PERF_CPP)
+  include(FetchContent)
+
+  set(BUILD_TESTING OFF CACHE BOOL "" FORCE)
+  set(BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+  set(BUILD_LIB_SHARED OFF CACHE BOOL "" FORCE)
+
+  FetchContent_Declare(
+    perf-cpp-external
+    GIT_REPOSITORY "https://github.com/jmuehlig/perf-cpp"
+    GIT_TAG "v0.12.6"
+  )
+  FetchContent_MakeAvailable(perf-cpp-external)
+
+  if(TARGET perf-cpp::perf-cpp)
+    target_link_libraries(${PROJECT_NAME} PRIVATE perf-cpp::perf-cpp)
+  elseif(TARGET perf-cpp)
+    target_link_libraries(${PROJECT_NAME} PRIVATE perf-cpp)
+  else()
+    message(FATAL_ERROR "perf-cpp target not found after FetchContent")
+  endif()
+
+  target_include_directories(${PROJECT_NAME} PRIVATE ${perf-cpp-external_SOURCE_DIR}/include)
+
+  target_compile_definitions(${PROJECT_NAME} PRIVATE GRUDON_ENABLE_PERF_CPP=1)
+  target_compile_options(${PROJECT_NAME} PRIVATE -g -fno-omit-frame-pointer)
+endif()
+
 # Add METIS
 # find_library(GKlib NAMES GKlib REQUIRED)
 # find_library(METIS NAMES metis REQUIRED)

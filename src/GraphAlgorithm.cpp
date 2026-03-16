@@ -1,9 +1,11 @@
 #include "GraphAlgorithm.hpp"
 
 #include <algorithm>
+#include <unordered_map>
 
 #include "Logger.hpp"
 #include "MPI.hpp"
+#include "RuntimeProfiler.hpp"
 #include "offload_engine/INCEngine.hpp"
 #include "offload_engine/NDPEngine.hpp"
 
@@ -86,7 +88,7 @@ GraphAlgorithm<VertexProperty>::GraphAlgorithm(
 
   if (node_type == COMPUTE_NODE)
   {
-    nGaloisThreads /= 4;
+    nGaloisThreads = nGaloisThreads / 4 > 0 ? nGaloisThreads / 4 : nGaloisThreads; 
     worker = new UpdateWorker<VertexProperty>(graph_path, num_compute, num_memory, node_id, node_type, net, partitioning_scheme_file);
     verticesPerThread = worker->num_vertices / nGaloisThreads > 0 ? worker->num_vertices / nGaloisThreads : 1;
 
@@ -145,6 +147,8 @@ GraphAlgorithm<VertexProperty>::GraphAlgorithm(
 template<typename VertexProperty>
 void GraphAlgorithm<VertexProperty>::run()
 {
+  RuntimeProfiler profiler(algorithm_name, worker->node_id);
+
   std::vector<uint32_t> idxTracker;
   std::vector<MPI_Request> bv_requests;
   std::vector<MPI_Request> data_requests;
@@ -176,6 +180,9 @@ void GraphAlgorithm<VertexProperty>::run()
 
   while (worker_completion_count != num_compute && iteration < MAX_ITERATIONS)
   {
+    profiler.startIteration();
+    profiler.increment("iteration");
+
     memory_offload = NO_OFFLOAD;
     switch_offload = NO_OFFLOAD;
     ndp_decision = NO_OFFLOAD;
@@ -217,82 +224,98 @@ void GraphAlgorithm<VertexProperty>::run()
       //       worker_id);
       // }
 
-      generatePerThreadMatrix(current_frontier);
-
-      galois::do_all(
-          galois::iterate(0ul, nGaloisThreads),
-          [&](const size_t tid)
-          {
-            for (int worker_id = 0; worker_id < num_memory; worker_id++)
-            {
-              size_t offset = std::accumulate(
-                  perThreadVCounts[worker_id].begin(), std::next(perThreadVCounts[worker_id].begin(), tid), 0);
-
-              for (uint64_t j = 0; j < perThreadVCounts[worker_id][tid]; j++)
-              {
-                GNode lid = perThreadOffsetMatrix[worker_id][tid][j];
-                worker->bitCommVector[worker_id].set(worker->sTranslationTable[worker_id][lid]);
-                propertyBuffers[worker_id][offset + j] = vertex_properties[lid];
-
-                // spdlog::debug(
-                //     "[Proc {}/{}] Sending propertyBuffers: {}/{} to Memory Node: {}",
-                //     worker->node_id,
-                //     iteration,
-                //     worker->distributed_graph->getGlobalNode(lid),
-                //     vertex_properties[lid],
-                //     worker_id);
-              }
-            }
-          });
-
-      for (int worker_id = 0; worker_id < num_memory; worker_id++)
       {
-        // spdlog::info("[Proc {}/{}] Property Buffers: {}", this->worker->node_id, worker_id, fmt_array(propertyBuffers[worker_id]));
-        net.Isend(
-            worker_id + num_compute,
-            0,
-            worker->bitCommVector[worker_id].bitvec.data(),
-            worker->bitCommVector[worker_id].size_bytes(),
-            MPI_UINT64_T,
-            &bv_requests[worker_id]);
+        ScopedOperationProfile profile_scope(profiler, "host_prepare_frontier");
+        generatePerThreadMatrix(current_frontier);
 
-        net.Isend(
-            worker_id + num_compute,
-            0,
-            propertyBuffers[worker_id].data(),
-            std::accumulate(perThreadVCounts[worker_id].begin(), perThreadVCounts[worker_id].end(), 0),
-            MPI_VERTEX_PROPERTY_T,
-            &data_requests[worker_id]);
+        galois::do_all(
+            galois::iterate(0ul, nGaloisThreads),
+            [&](const size_t tid)
+            {
+              for (int worker_id = 0; worker_id < num_memory; worker_id++)
+              {
+                size_t offset = std::accumulate(
+                    perThreadVCounts[worker_id].begin(), std::next(perThreadVCounts[worker_id].begin(), tid), 0);
+
+                for (uint64_t j = 0; j < perThreadVCounts[worker_id][tid]; j++)
+                {
+                  GNode lid = perThreadOffsetMatrix[worker_id][tid][j];
+                  worker->bitCommVector[worker_id].set(worker->sTranslationTable[worker_id][lid]);
+                  propertyBuffers[worker_id][offset + j] = vertex_properties[lid];
+
+                  // spdlog::debug(
+                  //     "[Proc {}/{}] Sending propertyBuffers: {}/{} to Memory Node: {}",
+                  //     worker->node_id,
+                  //     iteration,
+                  //     worker->distributed_graph->getGlobalNode(lid),
+                  //     vertex_properties[lid],
+                  //     worker_id);
+                }
+              }
+            });
       }
 
-      for (int i = 0; i < num_memory; i++)
       {
-        MPI_Wait(&bv_requests[i], &statuses[i]);
-        MPI_Wait(&data_requests[i], &statuses[i]);
-        worker->bitCommVector[i].reset();
+        ScopedOperationProfile profile_scope(profiler, "host_send_updates_to_remote");
+
+        for (int worker_id = 0; worker_id < num_memory; worker_id++)
+        {
+          // spdlog::info("[Proc {}/{}] Property Buffers: {}", this->worker->node_id, worker_id, fmt_array(propertyBuffers[worker_id]));
+          const uint64_t payload_count = std::accumulate(perThreadVCounts[worker_id].begin(), perThreadVCounts[worker_id].end(), 0);
+          const uint64_t bytes_sent =
+              static_cast<uint64_t>(worker->bitCommVector[worker_id].size_bytes()) * sizeof(uint64_t) +
+              payload_count * sizeof(VertexProperty);
+          profiler.addHostToRemoteBytes(bytes_sent);
+
+          net.Isend(
+              worker_id + num_compute,
+              0,
+              worker->bitCommVector[worker_id].bitvec.data(),
+              worker->bitCommVector[worker_id].size_bytes(),
+              MPI_UINT64_T,
+              &bv_requests[worker_id]);
+
+          net.Isend(
+              worker_id + num_compute,
+              0,
+              propertyBuffers[worker_id].data(),
+              payload_count,
+              MPI_VERTEX_PROPERTY_T,
+              &data_requests[worker_id]);
+        }
+
+        for (int i = 0; i < num_memory; i++)
+        {
+          MPI_Wait(&bv_requests[i], &statuses[i]);
+          MPI_Wait(&data_requests[i], &statuses[i]);
+          worker->bitCommVector[i].reset();
+        }
       }
     }
     else if (node_type == MEMORY_NODE)
     {
-      for (int i = 0; i < num_compute; i++)
       {
-        net.Irecv(
-            i,
-            0,
-            worker->bitCommVector[i].bitvec.data(),
-            worker->bitCommVector[i].size_bytes(),
-            MPI_UINT64_T,
-            &statuses[i],
-            &bv_requests[i]);
+        ScopedOperationProfile profile_scope(profiler, "remote_apply_host_updates");
 
-        net.Irecv(
-            i,
-            0,
-            propertyBuffers[i].data(),
-            propertyBuffers[i].size(),
-            MPI_VERTEX_PROPERTY_T,
-            &statuses[i],
-            &data_requests[i]);
+        for (int i = 0; i < num_compute; i++)
+        {
+          net.Irecv(
+              i,
+              0,
+              worker->bitCommVector[i].bitvec.data(),
+              worker->bitCommVector[i].size_bytes(),
+              MPI_UINT64_T,
+              &statuses[i],
+              &bv_requests[i]);
+
+          net.Irecv(
+              i,
+              0,
+              propertyBuffers[i].data(),
+              propertyBuffers[i].size(),
+              MPI_VERTEX_PROPERTY_T,
+              &statuses[i],
+              &data_requests[i]);
 
         // size_t bitCommVectorSize = worker->bitCommVector[i].size();
         // for (size_t j = 0; j < bitCommVectorSize; j++)
@@ -313,25 +336,27 @@ void GraphAlgorithm<VertexProperty>::run()
         //   }
         // }
 
-        const std::vector<GNode> &updated_property_vertices = worker->bitCommVector[i].getOffsets();
-        const size_t &nVertices = updated_property_vertices.size();
-        const size_t &uVerticesPerThread = 1 + ((nVertices > nGaloisThreads) ? nVertices / nGaloisThreads : 0);
+          const std::vector<GNode> &updated_property_vertices = worker->bitCommVector[i].getOffsets();
+          const size_t &nVertices = updated_property_vertices.size();
+          const size_t &uVerticesPerThread = 1 + ((nVertices > nGaloisThreads) ? nVertices / nGaloisThreads : 0);
 
         // spdlog::info("[Proc {}] Updated Property Vertices: {}", worker->node_id, fmt_array(updated_property_vertices));
 
-        galois::do_all(
-            galois::iterate(0ul, nGaloisThreads),
-            [&](const size_t tid)
-            {
-              const size_t &start = tid * uVerticesPerThread;
-              const size_t &end = (tid + 1) * uVerticesPerThread > nVertices ? nVertices : (tid + 1) * uVerticesPerThread;
-
-              for (size_t j = start; j < end; j++)
+          galois::do_all(
+              galois::iterate(0ul, nGaloisThreads),
+              [&](const size_t tid)
               {
-                GNode lid = worker->rTranslationTable[i][updated_property_vertices[j]];
-                vertex_properties.set(lid, propertyBuffers[i][j]);
-              }
-            });
+                const size_t &start = tid * uVerticesPerThread;
+                const size_t &end =
+                    (tid + 1) * uVerticesPerThread > nVertices ? nVertices : (tid + 1) * uVerticesPerThread;
+
+                for (size_t j = start; j < end; j++)
+                {
+                  GNode lid = worker->rTranslationTable[i][updated_property_vertices[j]];
+                  vertex_properties.set(lid, propertyBuffers[i][j]);
+                }
+              });
+        }
       }
 
       for (int i = 0; i < num_compute; i++)
@@ -349,8 +374,10 @@ void GraphAlgorithm<VertexProperty>::run()
     {
       if (ndp_decision == NDP_OFFLOAD)
       {
-
-        worker->traverse(*this);
+        {
+          ScopedOperationProfile profile_scope(profiler, "remote_generate_updates");
+          worker->traverse(*this);
+        }
 
         // const galois::ThreadSafeOrderedSet<GNode> &updated_vertices = vertex_updates.getUpdatedVertices();
         const std::vector<GNode> updated_vertices = vertex_updates.getUpdatedVertices();
@@ -374,53 +401,61 @@ void GraphAlgorithm<VertexProperty>::run()
 
         // spdlog::info("[Proc {}] Updated Vertices: {}", this->worker->node_id, fmt_array(updated_vertices));
 
-        generatePerThreadMatrix(updated_vertices);
-
-        galois::do_all(
-            galois::iterate(0ul, nGaloisThreads),
-            [&](const size_t tid)
-            {
-              for (int worker_id = 0; worker_id < num_compute; worker_id++)
-              {
-                size_t offset = std::accumulate(
-                    perThreadVCounts[worker_id].begin(), std::next(perThreadVCounts[worker_id].begin(), tid), 0);
-
-                for (uint64_t j = 0; j < perThreadVCounts[worker_id][tid]; j++)
-                {
-                  GNode lid = perThreadOffsetMatrix[worker_id][tid][j];
-                  worker->bitCommVector[worker_id].set(worker->sTranslationTable[worker_id][lid]);
-                  propertyBuffers[worker_id][offset + j] = vertex_updates[lid];
-
-                  // spdlog::debug(
-                  //     "[Proc {}/{}] Sending propertyBuffers: {}/{} to Compute Node: {}",
-                  //     worker->node_id,
-                  //     tid,
-                  //     worker->distributed_graph->getGlobalNode(lid),
-                  //     propertyBuffers[worker_id][j],
-                  //     worker_id);
-                }
-              }
-            });
-
-        for (int i = 0; i < num_compute; i++)
         {
-          // spdlog::info("[Proc {}/{}] Property Buffers: {}", this->worker->node_id, i, fmt_array(propertyBuffers[i]));
+          ScopedOperationProfile profile_scope(profiler, "remote_send_updates_to_host");
+          generatePerThreadMatrix(updated_vertices);
 
-          net.Isend(
-              i,
-              0,
-              worker->bitCommVector[i].bitvec.data(),
-              worker->bitCommVector[i].size_bytes(),
-              MPI_UINT64_T,
-              &bv_requests[i]);
+          galois::do_all(
+              galois::iterate(0ul, nGaloisThreads),
+              [&](const size_t tid)
+              {
+                for (int worker_id = 0; worker_id < num_compute; worker_id++)
+                {
+                  size_t offset = std::accumulate(
+                      perThreadVCounts[worker_id].begin(), std::next(perThreadVCounts[worker_id].begin(), tid), 0);
 
-          net.Isend(
-              i,
-              0,
-              propertyBuffers[i].data(),
-              std::accumulate(perThreadVCounts[i].begin(), perThreadVCounts[i].end(), 0),
-              MPI_VERTEX_PROPERTY_T,
-              &data_requests[i]);
+                  for (uint64_t j = 0; j < perThreadVCounts[worker_id][tid]; j++)
+                  {
+                    GNode lid = perThreadOffsetMatrix[worker_id][tid][j];
+                    worker->bitCommVector[worker_id].set(worker->sTranslationTable[worker_id][lid]);
+                    propertyBuffers[worker_id][offset + j] = vertex_updates[lid];
+
+                    // spdlog::debug(
+                    //     "[Proc {}/{}] Sending propertyBuffers: {}/{} to Compute Node: {}",
+                    //     worker->node_id,
+                    //     tid,
+                    //     worker->distributed_graph->getGlobalNode(lid),
+                    //     propertyBuffers[worker_id][j],
+                    //     worker_id);
+                  }
+                }
+              });
+
+          for (int i = 0; i < num_compute; i++)
+          {
+            // spdlog::info("[Proc {}/{}] Property Buffers: {}", this->worker->node_id, i, fmt_array(propertyBuffers[i]));
+            const uint64_t payload_count = std::accumulate(perThreadVCounts[i].begin(), perThreadVCounts[i].end(), 0);
+            const uint64_t bytes_sent =
+                static_cast<uint64_t>(worker->bitCommVector[i].size_bytes()) * sizeof(uint64_t) +
+                payload_count * sizeof(VertexProperty);
+            profiler.addRemoteToHostBytes(bytes_sent);
+
+            net.Isend(
+                i,
+                0,
+                worker->bitCommVector[i].bitvec.data(),
+                worker->bitCommVector[i].size_bytes(),
+                MPI_UINT64_T,
+                &bv_requests[i]);
+
+            net.Isend(
+                i,
+                0,
+                propertyBuffers[i].data(),
+                payload_count,
+                MPI_VERTEX_PROPERTY_T,
+                &data_requests[i]);
+          }
         }
       }
       else if (ndp_decision == NO_OFFLOAD)
@@ -429,6 +464,8 @@ void GraphAlgorithm<VertexProperty>::run()
         std::vector<GNode> updated_vertices = vertex_properties.getUpdatedVertices();
 
         spdlog::debug("[Proc {}] Updated Vertices: {}", this->worker->node_id, fmt_array(updated_vertices));
+
+        ScopedOperationProfile profile_scope(profiler, "remote_send_updates_to_host");
 
         for (const GNode &lid : updated_vertices)
         {
@@ -469,6 +506,7 @@ void GraphAlgorithm<VertexProperty>::run()
           //     fmt_array(ebuffer),
           //     gid,
           //     worker_id);
+          profiler.addRemoteToHostBytes(ebuffer.size() * sizeof(GNode));
           net.send(worker_id, 0, ebuffer.data(), ebuffer.size(), MPI_GNODE_T);
         }
       }
@@ -477,6 +515,7 @@ void GraphAlgorithm<VertexProperty>::run()
     {
       if (ndp_decision == NDP_OFFLOAD)
       {
+        ScopedOperationProfile profile_scope(profiler, "host_receive_remote_updates");
         uint64_t bytes_recv = 0;
 
         for (int i = 0; i < num_memory; i++)
@@ -581,6 +620,7 @@ void GraphAlgorithm<VertexProperty>::run()
       }
       else if (ndp_decision == NO_OFFLOAD)
       {
+        ScopedOperationProfile profile_scope(profiler, "host_receive_remote_updates");
         // TODO: Push this to init() and only do it once
         uint64_t max_out_degree = 0;
         std::vector<GNode> frontier_iter = frontier.getOffsets();
@@ -645,7 +685,10 @@ void GraphAlgorithm<VertexProperty>::run()
       // this->frontier.clear();
       this->frontier.reset();
 
-      worker->update(*this);
+      {
+        ScopedOperationProfile profile_scope(profiler, "host_update_frontier");
+        worker->update(*this);
+      }
 
       if (termination_check())
       {
@@ -685,6 +728,8 @@ void GraphAlgorithm<VertexProperty>::run()
 
     net.allReduce(&completion, &worker_completion_count, 1, MPI_UINT32_T, MPI_SUM);
 
+    profiler.stopIteration();
+
     spdlog::info("[Proc {}] Iteration: {}, WCC: {}", worker->node_id, iteration++, worker_completion_count);
     // net.barrier();
   }
@@ -692,6 +737,41 @@ void GraphAlgorithm<VertexProperty>::run()
   uint64_t total_bytes = 0;
   uint64_t bytes = net.getBytesMoved();
   net.allReduce(&bytes, &total_bytes, 1, MPI_UINT64_T, MPI_SUM);
+
+  profiler.writeTrace();
+
+  std::unordered_map<std::string, uint64_t> global_calls;
+  for (const char* op_name : RuntimeProfiler::operationNames())
+  {
+    uint64_t local_call_count = profiler.callCount(op_name);
+    uint64_t global_call_count = 0;
+    net.allReduce(&local_call_count, &global_call_count, 1, MPI_UINT64_T, MPI_SUM);
+    global_calls[op_name] = global_call_count;
+  }
+
+  uint64_t global_callgraph_samples = 0;
+  uint64_t global_callgraph_frames = 0;
+  uint64_t local_callgraph_samples = profiler.callGraphSamples();
+  uint64_t local_callgraph_frames = profiler.callGraphFrames();
+  net.allReduce(&local_callgraph_samples, &global_callgraph_samples, 1, MPI_UINT64_T, MPI_SUM);
+  net.allReduce(&local_callgraph_frames, &global_callgraph_frames, 1, MPI_UINT64_T, MPI_SUM);
+
+  uint64_t global_host_to_remote = 0;
+  uint64_t global_remote_to_host = 0;
+  uint64_t local_host_to_remote = profiler.hostToRemoteBytes();
+  uint64_t local_remote_to_host = profiler.remoteToHostBytes();
+  net.allReduce(&local_host_to_remote, &global_host_to_remote, 1, MPI_UINT64_T, MPI_SUM);
+  net.allReduce(&local_remote_to_host, &global_remote_to_host, 1, MPI_UINT64_T, MPI_SUM);
+
+  profiler.writeJson(
+      net.getNumProcs(),
+      node_type,
+      iteration,
+      global_host_to_remote,
+      global_remote_to_host,
+      global_calls,
+      global_callgraph_samples,
+      global_callgraph_frames);
 
   if (worker->node_id == 0)
   {

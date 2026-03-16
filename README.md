@@ -56,6 +56,12 @@ mpirun -n 4 --npersocket 1 --map-by NUMA:PE=20 --use-hwthread-cpus --report-bind
 Please look at the `emulation_harness` directory for scripts to emulate the DiNDP
 environment on a multi-socket system.
 
+## Profiling
+
+The profiling workflow, runtime knobs, and expected output artifacts are documented in:
+
+- docs/profiling.md
+
 ---
 For more information please refer to our paper:
 ```bib
