@@ -5,6 +5,10 @@
 #include <fstream>
 #include <sstream>
 
+#if defined(GRUDON_ENABLE_PERF_CPP)
+#include <perfcpp/hardware_info.h>
+#endif
+
 namespace {
 
 constexpr std::array<const char*, 8> kOperationNames = {
@@ -458,19 +462,76 @@ void RuntimeProfiler::initPerfCpp()
     return;
   }
 
-  perf::EventCounter base_counter;
-  tryAddEvent(base_counter, "instructions");
-  tryAddEvent(base_counter, "cycles");
-  tryAddEvent(base_counter, "cache-misses");
+  std::string events_env = parseEnvString("GRUDON_PERF_EVENTS", "instructions,cycles,cache-misses");
+  std::stringstream ss(events_env);
+  std::string token;
+  
+
+  // Since `GEN_PROCESSOR_EVENTS` is set to ON in CMakeLists.txt, Intel Xeon-specific events
+  // are already auto-generated and compiled into the global counter definitions!
+  // If you still want to override or load a specific CSV dynamically without rebuilding, 
+  // you can provide the absolute path using the GRUDON_PERF_EVENTS_CSV environment variable.
+  std::string csv_path = parseEnvString("GRUDON_PERF_EVENTS_CSV", "");
+  if (!csv_path.empty())
+  {
+    counter_definition_ = std::make_unique<perf::CounterDefinition>(csv_path);
+  }
+
+  perf::Config perf_config;
+  perf_config.include_child_threads(true);
+
+  perf::EventCounter base_counter = counter_definition_
+                                        ? perf::EventCounter(*counter_definition_, perf_config)
+                                        : perf::EventCounter(perf_config);
+
+  while (std::getline(ss, token, ','))
+  {
+    if (!token.empty())
+    {
+      tryAddEvent(base_counter, token);
+    }
+  }
+
+  std::string abbrev;
+  for (const auto& ev : enabled_events_)
+  {
+    if (ev == "instructions") abbrev += "i";
+    else if (ev == "cycles") abbrev += "c";
+    else if (ev == "cache-misses") abbrev += "m";
+    else if (ev == "branches") abbrev += "b";
+    else if (ev == "branch-misses") abbrev += "bm";
+    else if (ev == "page-faults") abbrev += "pf";
+    else if (ev == "context-switches") abbrev += "cs";
+    else if (ev == "cpu-migrations") abbrev += "cm";
+    else if (ev == "L1-dcache-loads") abbrev += "L1l";
+    else if (ev == "L1-dcache-load-misses") abbrev += "L1lm";
+    else if (ev == "LLC-loads") abbrev += "LLCl";
+    else if (ev == "LLC-load-misses") abbrev += "LLClm";
+    else abbrev += ev[0];
+  }
+
+  if (!abbrev.empty())
+  {
+    output_prefix_ += "_" + abbrev;
+  }
 
   for (const char* op_name : operationNames())
   {
-    operation_perf_counters_.emplace(op_name, perf::EventCounter::copy_from_template(base_counter));
+    auto it = operation_perf_counters_.emplace(op_name, perf::EventCounter::copy_from_template(base_counter)).first;
+    it->second.open();
   }
 
   try
   {
-    sampler_.trigger(std::string("cycles"), perf::Frequency{parseEnvU64("GRUDON_PERF_SAMPLE_FREQUENCY", 10000ULL)});
+    auto freq = perf::Frequency{parseEnvU64("GRUDON_PERF_SAMPLE_FREQUENCY", 10000ULL)};
+    if (perf::HardwareInfo::is_intel())
+    {
+      sampler_.trigger("cycles", perf::Precision::MustHaveZeroSkid, freq);
+    }
+    else
+    {
+      sampler_.trigger(std::string("cycles"), freq);
+    }
 
     auto& values = sampler_.values();
     values.thread_id(true).timestamp(true).extended_mmap_information(true).cpu_id(true).logical_instruction_pointer(true);
@@ -493,6 +554,7 @@ void RuntimeProfiler::initPerfCpp()
   {
     sampler_ready_ = false;
   }
+  perf_config.is_pinned(true);
 }
 
 void RuntimeProfiler::updateCallGraphStats()

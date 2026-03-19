@@ -202,6 +202,8 @@ if(${PROJECT_NAME}_ENABLE_PERF_CPP)
   set(BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
   set(BUILD_LIB_SHARED OFF CACHE BOOL "" FORCE)
 
+  set(GEN_PROCESSOR_EVENTS ON CACHE BOOL "" FORCE)
+
   FetchContent_Declare(
     perf-cpp-external
     GIT_REPOSITORY "https://github.com/jmuehlig/perf-cpp"

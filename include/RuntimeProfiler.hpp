@@ -7,10 +7,12 @@
 #include <unordered_map>
 #include <utility>
 #include <vector>
+#include <memory>
 
 #include "Graph.hpp"
 
 #if defined(GRUDON_ENABLE_PERF_CPP)
+#include <perfcpp/counter_definition.h>
 #include <perfcpp/event_counter.h>
 #include <perfcpp/sampler.h>
 #endif
@@ -76,6 +78,7 @@ class RuntimeProfiler
   std::vector<std::string> unsupported_events_;
 
 #if defined(GRUDON_ENABLE_PERF_CPP)
+  std::unique_ptr<perf::CounterDefinition> counter_definition_;
   std::unordered_map<std::string, perf::EventCounter> operation_perf_counters_;
   perf::Sampler sampler_;
   bool sampler_ready_{false};
