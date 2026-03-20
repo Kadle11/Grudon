@@ -5,11 +5,21 @@ BASE_CMD="mpirun -n 2 --npersocket 1 --map-by NUMA:PE=2 --use-hwthread-cpus --re
     
 # Array of different event combinations to profile
 #    "mem_uops_retired.all_loads,mem_load_uops_retired.l3_miss,mem_uops_retired.all_stores"
-
-# "mem_load_uops_retired.l3_miss"
-# "instructions,cycles,cache-misses"
+#     "instructions,cycles,cache-misses"
+#   "instructions,cycles,cache-misses"
+#   "instructions,cycles,cache-misses"
+#   "dTLB-loads"
+#   "dTLB-loads"
+#   "dTLB-loads"
 declare -a EVENTS_TO_PROFILE=(
-    "dTLB-loads"
+    "mem_uops_retired.all_loads"
+    "mem_uops_retired.all_loads"
+    "mem_uops_retired.all_loads"
+    "mem_uops_retired.all_stores"
+    "mem_uops_retired.all_stores"
+    "mem_uops_retired.all_stores"
+
+
 )
 
 # Create an output directory if it doesn't exist
@@ -32,7 +42,7 @@ for i in "${!EVENTS_TO_PROFILE[@]}"; do
     export GRUDON_PROFILE_OUTPUT_DIR="output/run_${i}"
     
     echo "=========================================================="
-    echo "Run $(($i + 1))/3: Profiling events -> $events"
+    echo "Run $(($i + 1))/${#EVENTS_TO_PROFILE[@]}: Profiling events -> $events"
     echo "Output Prefix: $GRUDON_PROFILE_PREFIX"
     echo "=========================================================="
     
@@ -43,4 +53,4 @@ for i in "${!EVENTS_TO_PROFILE[@]}"; do
     echo "----------------------------------------------------------"
 done
 
-echo "All 3 runs completed successfully. Check the output/ directory for results."
+echo "All ${#EVENTS_TO_PROFILE[@]} runs completed successfully. Check the output/ directory for results."
