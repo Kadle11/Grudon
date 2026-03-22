@@ -7,6 +7,48 @@ BASE_CMD="${GRUDON_BASE_CMD:-$BASE_CMD_DEFAULT}"
 EVENTS="${GRUDON_PR_INTERNAL_EVENTS:-cycles,instructions}"
 RUN_COUNT="${GRUDON_PR_INTERNAL_RUN_COUNT:-3}"
 OUTPUT_ROOT="${GRUDON_PR_INTERNAL_OUTPUT_ROOT:-output/pr_internal}"
+PHASE_SEQUENCE_DEFAULT="update_frontier gen_updates apply_updates"
+PHASE_SEQUENCE=( ${GRUDON_PR_INTERNAL_PHASE_SEQUENCE:-$PHASE_SEQUENCE_DEFAULT} )
+
+canonicalize_phase() {
+  local raw_phase="$1"
+
+  case "${raw_phase,,}" in
+    update_frontier|frontier)
+      echo "update_frontier"
+      ;;
+    gen_updates|gen)
+      echo "gen_updates"
+      ;;
+    apply_updates|apply)
+      echo "apply_updates"
+      ;;
+    all)
+      echo "all"
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+if [[ ${#PHASE_SEQUENCE[@]} -eq 0 ]]; then
+  echo "ERROR: GRUDON_PR_INTERNAL_PHASE_SEQUENCE is empty."
+  echo "Use a space-separated list, for example: update_frontier gen_updates apply_updates"
+  exit 1
+fi
+
+CANONICAL_PHASE_SEQUENCE=()
+for phase in "${PHASE_SEQUENCE[@]}"; do
+  if ! canonical_phase="$(canonicalize_phase "$phase")"; then
+    echo "ERROR: Invalid phase '$phase' in GRUDON_PR_INTERNAL_PHASE_SEQUENCE."
+    echo "Supported values: update_frontier, gen_updates, apply_updates, all"
+    echo "Aliases: frontier, gen, apply"
+    exit 1
+  fi
+
+  CANONICAL_PHASE_SEQUENCE+=("$canonical_phase")
+done
 
 mkdir -p "$OUTPUT_ROOT"
 
@@ -19,16 +61,21 @@ echo "Base command: $BASE_CMD"
 echo "Events: $GRUDON_PERF_EVENTS"
 echo "Runs: $RUN_COUNT"
 echo "Output root: $OUTPUT_ROOT"
+echo "Phase sequence: ${CANONICAL_PHASE_SEQUENCE[*]}"
 
 for ((i = 0; i < RUN_COUNT; i++)); do
   run_dir="$OUTPUT_ROOT/run_${i}"
   mkdir -p "$run_dir"
+
+  phase_idx=$((i % ${#CANONICAL_PHASE_SEQUENCE[@]}))
+  export GRUDON_PR_PROFILE_PHASE="${CANONICAL_PHASE_SEQUENCE[$phase_idx]}"
 
   export GRUDON_PROFILE_PREFIX="pagerank_internal_run_${i}"
   export GRUDON_PROFILE_OUTPUT_DIR="$run_dir"
 
   echo "=========================================================="
   echo "Run $((i + 1))/$RUN_COUNT"
+  echo "Internal phase selection: $GRUDON_PR_PROFILE_PHASE"
   echo "Output Prefix: $GRUDON_PROFILE_PREFIX"
   echo "=========================================================="
 

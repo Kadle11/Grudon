@@ -49,6 +49,50 @@ constexpr std::array<const char*, 14> kPageRankFineOperationNames = {
     "pr_frontier_set_bits",
     "pr_frontier_store_prev_updates"};
 
+[[nodiscard]] std::string normalizeAsciiLower(std::string value)
+{
+  for (char& ch : value)
+  {
+    if (ch >= 'A' && ch <= 'Z')
+    {
+      ch = static_cast<char>(ch - 'A' + 'a');
+    }
+  }
+
+  return value;
+}
+
+[[nodiscard]] bool hasPrefix(const std::string& value, const char* prefix)
+{
+  const std::string prefix_str(prefix);
+  return value.rfind(prefix_str, 0) == 0;
+}
+
+[[nodiscard]] bool shouldEnablePhaseOperation(const std::string& op_name, const std::string& selected_phase)
+{
+  if (selected_phase.empty() || selected_phase == "all")
+  {
+    return true;
+  }
+
+  if (selected_phase == "apply_updates" || selected_phase == "apply")
+  {
+    return hasPrefix(op_name, "pr_apply_");
+  }
+
+  if (selected_phase == "gen_updates" || selected_phase == "gen")
+  {
+    return hasPrefix(op_name, "pr_gen_");
+  }
+
+  if (selected_phase == "update_frontier" || selected_phase == "frontier")
+  {
+    return hasPrefix(op_name, "pr_frontier_");
+  }
+
+  return true;
+}
+
 [[nodiscard]] bool parseEnvFlag(const char* name, bool fallback)
 {
   const char* value = std::getenv(name);
@@ -150,18 +194,26 @@ RuntimeProfiler::RuntimeProfiler(const std::string& algorithm_name, const uint32
 
   if (algorithm_name_ == "PageRank" && pr_internal_enabled_)
   {
+    const std::string selected_phase = normalizeAsciiLower(parseEnvString("GRUDON_PR_PROFILE_PHASE", "all"));
+
     if (pr_fine_enabled_)
     {
       for (const char* op_name : kPageRankFineOperationNames)
       {
-        operation_names_.emplace_back(op_name);
+        if (shouldEnablePhaseOperation(op_name, selected_phase))
+        {
+          operation_names_.emplace_back(op_name);
+        }
       }
     }
     else
     {
       for (const char* op_name : kPageRankInternalOperationNames)
       {
-        operation_names_.emplace_back(op_name);
+        if (shouldEnablePhaseOperation(op_name, selected_phase))
+        {
+          operation_names_.emplace_back(op_name);
+        }
       }
     }
   }
