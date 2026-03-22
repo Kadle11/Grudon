@@ -13,13 +13,8 @@ BASE_CMD="mpirun -n 2 --npersocket 1 --map-by NUMA:PE=2 --use-hwthread-cpus --re
 #   "dTLB-loads"
 declare -a EVENTS_TO_PROFILE=(
     "mem_uops_retired.all_loads"
-    "mem_uops_retired.all_loads"
-    "mem_uops_retired.all_loads"
-    "mem_uops_retired.all_stores"
-    "mem_uops_retired.all_stores"
-    "mem_uops_retired.all_stores"
-
-
+    "instructions,cycles"
+    "dTLB-loads"
 )
 
 # Create an output directory if it doesn't exist

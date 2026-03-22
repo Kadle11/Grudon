@@ -21,6 +21,8 @@ class TraverseWorker;
 template<typename VertexProperty>
 class AggregateWorker;
 
+class RuntimeProfiler;
+
 template<typename VertexProperty>
 class GraphAlgorithm
 {
@@ -74,6 +76,7 @@ class GraphAlgorithm
   std::vector<std::vector<size_t>> perThreadVCounts;
   size_t nGaloisThreads;
   size_t verticesPerThread;
+  RuntimeProfiler* runtime_profiler_{nullptr};
 
   // All Workers need access to the Graph Algorithm Interface
 

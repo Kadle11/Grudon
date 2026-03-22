@@ -22,7 +22,9 @@ class RuntimeProfiler
  public:
   RuntimeProfiler(const std::string& algorithm_name, uint32_t rank);
 
-  static const std::array<const char*, 8>& operationNames();
+  static const std::array<const char*, 8>& baseOperationNames();
+  [[nodiscard]] const std::vector<std::string>& operationNames() const;
+  [[nodiscard]] bool hasOperation(const std::string& operation) const;
 
   void startIteration();
   void stopIteration();
@@ -63,8 +65,11 @@ class RuntimeProfiler
   std::string algorithm_name_;
   uint32_t rank_;
   bool enabled_{false};
+  bool pr_internal_enabled_{false};
+  bool pr_fine_enabled_{false};
   std::string output_dir_;
   std::string output_prefix_;
+  std::vector<std::string> operation_names_;
   uint64_t host_to_remote_bytes_{0};
   uint64_t remote_to_host_bytes_{0};
   uint64_t callgraph_samples_{0};

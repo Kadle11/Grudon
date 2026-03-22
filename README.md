@@ -60,7 +60,9 @@ environment on a multi-socket system.
 
 The profiling workflow, runtime knobs, and expected output artifacts are documented in:
 
-- docs/profiling.md
+- docs/profiling
+
+That document also includes PageRank fine-grained internal cycle attribution (top-3 operations per phase).
 
 That workflow also generates SVG plots under `output/profile_plots/` for a compact cycle overview plus a single grouped sensitivity view.
 The main plot is the comprehensive metric heatmap, which shows instructions, cycles, cache misses, dTLB loads, L3 misses, mem loads, and mem stores side by side per operation.

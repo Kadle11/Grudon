@@ -1,5 +1,6 @@
 #include "RuntimeProfiler.hpp"
 
+#include <algorithm>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
@@ -20,6 +21,33 @@ constexpr std::array<const char*, 8> kOperationNames = {
     "remote_send_updates_to_host",
     "host_receive_remote_updates",
     "host_update_frontier"};
+
+constexpr std::array<const char*, 9> kPageRankInternalOperationNames = {
+    "pr_apply_collect_frontier",
+    "pr_apply_filter_updates",
+    "pr_apply_commit_updates",
+    "pr_gen_collect_sources",
+    "pr_gen_collect_edge_contribs",
+    "pr_gen_scatter_updates",
+    "pr_frontier_collect_candidates",
+    "pr_frontier_select_active",
+    "pr_frontier_commit_active"};
+
+constexpr std::array<const char*, 14> kPageRankFineOperationNames = {
+    "pr_apply_collect_frontier",
+    "pr_apply_filter_updates",
+    "pr_apply_load_active_updates",
+    "pr_apply_accumulate_pr",
+    "pr_apply_recompute_property",
+    "pr_apply_clear_buffers",
+    "pr_gen_collect_sources",
+    "pr_gen_count_edges",
+    "pr_gen_expand_edge_contribs",
+    "pr_gen_scatter_updates",
+    "pr_frontier_collect_candidates",
+    "pr_frontier_select_active",
+    "pr_frontier_set_bits",
+    "pr_frontier_store_prev_updates"};
 
 [[nodiscard]] bool parseEnvFlag(const char* name, bool fallback)
 {
@@ -109,15 +137,40 @@ constexpr std::array<const char*, 8> kOperationNames = {
 RuntimeProfiler::RuntimeProfiler(const std::string& algorithm_name, const uint32_t rank)
     : algorithm_name_(algorithm_name), rank_(rank)
 {
-  for (const char* op_name : operationNames())
+  enabled_ = parseEnvFlag("GRUDON_ENABLE_PERF_PROFILE", true);
+  pr_internal_enabled_ = parseEnvFlag("GRUDON_ENABLE_PR_INTERNAL_PROFILE", false);
+  pr_fine_enabled_ = parseEnvFlag("GRUDON_ENABLE_PR_FINE_PROFILE", false);
+  output_dir_ = parseEnvString("GRUDON_PROFILE_OUTPUT_DIR", "output");
+  output_prefix_ = parseEnvString("GRUDON_PROFILE_PREFIX", "grudon");
+
+  for (const char* op_name : baseOperationNames())
+  {
+    operation_names_.emplace_back(op_name);
+  }
+
+  if (algorithm_name_ == "PageRank" && pr_internal_enabled_)
+  {
+    if (pr_fine_enabled_)
+    {
+      for (const char* op_name : kPageRankFineOperationNames)
+      {
+        operation_names_.emplace_back(op_name);
+      }
+    }
+    else
+    {
+      for (const char* op_name : kPageRankInternalOperationNames)
+      {
+        operation_names_.emplace_back(op_name);
+      }
+    }
+  }
+
+  for (const std::string& op_name : operation_names_)
   {
     call_counts_[op_name] = 0;
     operation_counters_[op_name] = {};
   }
-
-  enabled_ = parseEnvFlag("GRUDON_ENABLE_PERF_PROFILE", true);
-  output_dir_ = parseEnvString("GRUDON_PROFILE_OUTPUT_DIR", "output");
-  output_prefix_ = parseEnvString("GRUDON_PROFILE_PREFIX", "grudon");
 
 #if defined(GRUDON_ENABLE_PERF_CPP)
   callgraph_enabled_ = parseEnvFlag("GRUDON_PERF_ENABLE_CALLGRAPH", true);
@@ -126,9 +179,19 @@ RuntimeProfiler::RuntimeProfiler(const std::string& algorithm_name, const uint32
 #endif
 }
 
-const std::array<const char*, 8>& RuntimeProfiler::operationNames()
+const std::array<const char*, 8>& RuntimeProfiler::baseOperationNames()
 {
   return kOperationNames;
+}
+
+const std::vector<std::string>& RuntimeProfiler::operationNames() const
+{
+  return operation_names_;
+}
+
+bool RuntimeProfiler::hasOperation(const std::string& operation) const
+{
+  return std::find(operation_names_.begin(), operation_names_.end(), operation) != operation_names_.end();
 }
 
 void RuntimeProfiler::startIteration()
@@ -372,7 +435,7 @@ void RuntimeProfiler::writeJson(
   const auto& op_names = operationNames();
   for (size_t i = 0; i < op_names.size(); i++)
   {
-    const std::string op = op_names[i];
+    const std::string& op = op_names[i];
     json << "    \"" << op << "\": " << callCount(op);
     if (i + 1 < op_names.size())
     {
@@ -385,7 +448,7 @@ void RuntimeProfiler::writeJson(
   json << "  \"global_operation_call_counts\": {\n";
   for (size_t i = 0; i < op_names.size(); i++)
   {
-    const std::string op = op_names[i];
+    const std::string& op = op_names[i];
     const auto it = global_calls.find(op);
     const uint64_t count = (it == global_calls.end()) ? 0 : it->second;
     json << "    \"" << op << "\": " << count;
@@ -400,7 +463,7 @@ void RuntimeProfiler::writeJson(
   json << "  \"operation_counters\": {\n";
   for (size_t i = 0; i < op_names.size(); i++)
   {
-    const std::string op = op_names[i];
+    const std::string& op = op_names[i];
     json << "    \"" << op << "\": {";
 
     const auto op_it = operation_counters_.find(op);
@@ -515,7 +578,7 @@ void RuntimeProfiler::initPerfCpp()
     output_prefix_ += "_" + abbrev;
   }
 
-  for (const char* op_name : operationNames())
+  for (const std::string& op_name : operation_names_)
   {
     auto it = operation_perf_counters_.emplace(op_name, perf::EventCounter::copy_from_template(base_counter)).first;
     it->second.open();

@@ -32,6 +32,8 @@ class PageRank : public GraphAlgorithm<VertexProperty>
  private:
   PropertyList<VertexProperty> pr_vals;
   PropertyList<VertexProperty> prev_updates;
+  bool pr_internal_profile_enabled_{false};
+  bool pr_fine_profile_enabled_{false};
 };
 
 // Explicit Instantiation

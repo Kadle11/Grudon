@@ -148,6 +148,7 @@ template<typename VertexProperty>
 void GraphAlgorithm<VertexProperty>::run()
 {
   RuntimeProfiler profiler(algorithm_name, worker->node_id);
+  runtime_profiler_ = &profiler;
 
   std::vector<uint32_t> idxTracker;
   std::vector<MPI_Request> bv_requests;
@@ -742,7 +743,7 @@ void GraphAlgorithm<VertexProperty>::run()
   profiler.writeTrace();
 
   std::unordered_map<std::string, uint64_t> global_calls;
-  for (const char* op_name : RuntimeProfiler::operationNames())
+  for (const std::string& op_name : profiler.operationNames())
   {
     uint64_t local_call_count = profiler.callCount(op_name);
     uint64_t global_call_count = 0;
@@ -773,6 +774,8 @@ void GraphAlgorithm<VertexProperty>::run()
       global_calls,
       global_callgraph_samples,
       global_callgraph_frames);
+
+  runtime_profiler_ = nullptr;
 
   if (worker->node_id == 0)
   {
