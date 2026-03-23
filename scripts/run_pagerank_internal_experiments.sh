@@ -5,9 +5,9 @@ set -euo pipefail
 BASE_CMD_DEFAULT="mpirun -n 2 --npersocket 1 --map-by NUMA:PE=2 --use-hwthread-cpus --report-bindings ./build/bin/Debug/Grudon -g graphs/galois/sgr/soc-LiveJournal1.mtx.sgr -c 1 -m 1 -t 4 -p partitions/soc-LiveJournal1.mtx.4parts"
 BASE_CMD="${GRUDON_BASE_CMD:-$BASE_CMD_DEFAULT}"
 EVENTS="${GRUDON_PR_INTERNAL_EVENTS:-cycles,instructions}"
-RUN_COUNT="${GRUDON_PR_INTERNAL_RUN_COUNT:-3}"
+RUN_COUNT="${GRUDON_PR_INTERNAL_RUN_COUNT:-8}"
 OUTPUT_ROOT="${GRUDON_PR_INTERNAL_OUTPUT_ROOT:-output/pr_internal}"
-PHASE_SEQUENCE_DEFAULT="update_frontier gen_updates apply_updates"
+PHASE_SEQUENCE_DEFAULT="gen_updates apply_updates update_frontier"
 PHASE_SEQUENCE=( ${GRUDON_PR_INTERNAL_PHASE_SEQUENCE:-$PHASE_SEQUENCE_DEFAULT} )
 
 canonicalize_phase() {

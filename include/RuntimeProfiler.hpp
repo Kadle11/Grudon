@@ -67,6 +67,7 @@ class RuntimeProfiler
   bool enabled_{false};
   bool pr_internal_enabled_{false};
   bool pr_fine_enabled_{false};
+  bool write_trace_enabled_{true};
   std::string output_dir_;
   std::string output_prefix_;
   std::vector<std::string> operation_names_;

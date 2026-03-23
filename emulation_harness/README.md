@@ -115,3 +115,43 @@ This script provides fine-grained control over SMT by allowing you to enable or 
 - Root privileges (modifies `/sys/devices/system/cpu/`)
 - NUMA-aware system
 - Hyperthreading-capable CPUs
+
+---
+
+### 4. current_memory_bandwidth.sh
+
+**Description**: One-shot snapshot of current per-socket memory bandwidth.
+
+This script runs Intel MLC once, parses the NUMA bandwidth matrix, and reports the local bandwidth on each socket plus an aggregate total. It also prints best-effort "top consumers" views.
+
+**Usage**:
+```bash
+./current_memory_bandwidth.sh <path_to_mlc> [top_n] [sample_seconds]
+```
+
+**Parameters**:
+- `path_to_mlc`: Path to Intel Memory Latency Checker (MLC) binary
+- `top_n` (optional): Number of processes to print in top-consumer lists (default: `5`)
+- `sample_seconds` (optional): Sampling interval for page-fault activity via `pidstat` (default: `1`)
+
+**Examples**:
+```bash
+# Basic bandwidth snapshot
+./current_memory_bandwidth.sh ./mlc
+
+# Show top 10 consumers and sample memory activity for 2 seconds
+./current_memory_bandwidth.sh ./mlc 10 2
+```
+
+**What it does**:
+1. Runs `mlc --bandwidth_matrix`
+2. Extracts local (diagonal) MB/s per socket
+3. Prints aggregate local memory bandwidth
+4. Shows top processes by RSS
+5. If `pidstat` is installed, shows processes with highest page-fault activity
+
+**Requirements**:
+- Intel MLC (Memory Latency Checker) binary
+- `bc` calculator
+- `ps` utility
+- Optional: `pidstat` (from `sysstat`) for page-fault activity ranking

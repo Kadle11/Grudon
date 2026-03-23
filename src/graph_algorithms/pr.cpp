@@ -95,7 +95,7 @@ void PageRank<VertexProperty>::apply_updates()
   //   spdlog::info("[Proc {}] Vertex {}: {}/{}", this->worker->node_id, n, this->pr_vals[n], this->vertex_updates[n]);
   // }
   if (!this->pr_internal_profile_enabled_ || this->runtime_profiler_ == nullptr ||
-      !this->runtime_profiler_->hasOperation("pr_apply_collect_frontier"))
+      !this->runtime_profiler_->hasOperation("pr_apply_collect_frontier_vec_gnode_bitset"))
   {
     std::vector<GNode> frontier_iter = this->frontier.getOffsets();
     galois::do_all(
@@ -119,7 +119,7 @@ void PageRank<VertexProperty>::apply_updates()
 
   RuntimeProfiler& profiler = *this->runtime_profiler_;
 
-  if (this->pr_fine_profile_enabled_ && this->runtime_profiler_->hasOperation("pr_apply_load_active_updates"))
+  if (this->pr_fine_profile_enabled_ && this->runtime_profiler_->hasOperation("pr_apply_load_active_updates_vec_value"))
   {
     std::vector<GNode> frontier_iter;
     galois::DynamicBitSet apply_mask;
@@ -127,13 +127,13 @@ void PageRank<VertexProperty>::apply_updates()
     std::vector<VertexProperty> active_updates;
 
     {
-      ScopedOperationProfile profile_scope(profiler, "pr_apply_collect_frontier");
+      ScopedOperationProfile profile_scope(profiler, "pr_apply_collect_frontier_vec_gnode_bitset");
       frontier_iter = this->frontier.getOffsets();
       apply_mask.resize(this->worker->num_vertices);
     }
 
     {
-      ScopedOperationProfile profile_scope(profiler, "pr_apply_filter_updates");
+      ScopedOperationProfile profile_scope(profiler, "pr_apply_filter_updates_bitset_mask");
       galois::do_all(
           galois::iterate(frontier_iter),
           [&](GNode lid)
@@ -149,7 +149,7 @@ void PageRank<VertexProperty>::apply_updates()
     }
 
     {
-      ScopedOperationProfile profile_scope(profiler, "pr_apply_load_active_updates");
+      ScopedOperationProfile profile_scope(profiler, "pr_apply_load_active_updates_vec_value");
       active_vertices = apply_mask.getOffsets();
       active_updates.resize(active_vertices.size(), static_cast<VertexProperty>(0));
       galois::do_all(
@@ -164,7 +164,7 @@ void PageRank<VertexProperty>::apply_updates()
     }
 
     {
-      ScopedOperationProfile profile_scope(profiler, "pr_apply_accumulate_pr");
+      ScopedOperationProfile profile_scope(profiler, "pr_apply_accumulate_pr_atomic_add");
       galois::do_all(
           galois::iterate(size_t(0), active_vertices.size()),
           [&](size_t idx)
@@ -177,7 +177,7 @@ void PageRank<VertexProperty>::apply_updates()
     }
 
     {
-      ScopedOperationProfile profile_scope(profiler, "pr_apply_recompute_property");
+      ScopedOperationProfile profile_scope(profiler, "pr_apply_recompute_property_vec_store");
       galois::do_all(
           galois::iterate(size_t(0), active_vertices.size()),
           [&](size_t idx)
@@ -195,7 +195,7 @@ void PageRank<VertexProperty>::apply_updates()
     }
 
     {
-      ScopedOperationProfile profile_scope(profiler, "pr_apply_clear_buffers");
+      ScopedOperationProfile profile_scope(profiler, "pr_apply_clear_buffers_vec_zero");
       galois::do_all(
           galois::iterate(active_vertices),
           [&](GNode lid)
@@ -215,13 +215,13 @@ void PageRank<VertexProperty>::apply_updates()
   galois::DynamicBitSet apply_mask;
 
   {
-    ScopedOperationProfile profile_scope(profiler, "pr_apply_collect_frontier");
+    ScopedOperationProfile profile_scope(profiler, "pr_apply_collect_frontier_vec_gnode_bitset");
     frontier_iter = this->frontier.getOffsets();
     apply_mask.resize(this->worker->num_vertices);
   }
 
   {
-    ScopedOperationProfile profile_scope(profiler, "pr_apply_filter_updates");
+    ScopedOperationProfile profile_scope(profiler, "pr_apply_filter_updates_bitset_mask");
     galois::do_all(
         galois::iterate(frontier_iter),
         [&](GNode lid)
@@ -237,7 +237,7 @@ void PageRank<VertexProperty>::apply_updates()
   }
 
   {
-    ScopedOperationProfile profile_scope(profiler, "pr_apply_commit_updates");
+    ScopedOperationProfile profile_scope(profiler, "pr_apply_commit_updates_vec_gnode");
     const std::vector<GNode> active_vertices = apply_mask.getOffsets();
     galois::do_all(
         galois::iterate(active_vertices),
@@ -259,7 +259,7 @@ template<typename VertexProperty>
 void PageRank<VertexProperty>::gen_updates()
 {
   if (!this->pr_internal_profile_enabled_ || this->runtime_profiler_ == nullptr ||
-      !this->runtime_profiler_->hasOperation("pr_gen_collect_sources"))
+      !this->runtime_profiler_->hasOperation("pr_gen_collect_sources_vec_gnode"))
   {
     // galois::ThreadSafeOrderedSet<GNode> &updated_vertices = this->vertex_properties.getUpdatedVertices();
     std::vector<GNode> updated_vertices = this->vertex_properties.getUpdatedVertices();
@@ -294,19 +294,19 @@ void PageRank<VertexProperty>::gen_updates()
 
   RuntimeProfiler& profiler = *this->runtime_profiler_;
 
-  if (this->pr_fine_profile_enabled_ && this->runtime_profiler_->hasOperation("pr_gen_count_edges"))
+  if (this->pr_fine_profile_enabled_ && this->runtime_profiler_->hasOperation("pr_gen_count_edges_scalar_u64"))
   {
     std::vector<GNode> updated_vertices;
     std::vector<std::pair<GNode, VertexProperty>> edge_contribs;
 
     {
-      ScopedOperationProfile profile_scope(profiler, "pr_gen_collect_sources");
+      ScopedOperationProfile profile_scope(profiler, "pr_gen_collect_sources_vec_gnode");
       updated_vertices = this->vertex_properties.getUpdatedVertices();
     }
 
     size_t total_edges = 0;
     {
-      ScopedOperationProfile profile_scope(profiler, "pr_gen_count_edges");
+      ScopedOperationProfile profile_scope(profiler, "pr_gen_count_edges_scalar_u64");
       for (const GNode lid : updated_vertices)
       {
         auto ii = this->worker->distributed_graph->lgraph.edge_begin(lid);
@@ -316,7 +316,7 @@ void PageRank<VertexProperty>::gen_updates()
     }
 
     {
-      ScopedOperationProfile profile_scope(profiler, "pr_gen_expand_edge_contribs");
+      ScopedOperationProfile profile_scope(profiler, "pr_gen_expand_edge_contribs_vec_pair");
       edge_contribs.reserve(total_edges);
       for (const GNode lid : updated_vertices)
       {
@@ -331,7 +331,7 @@ void PageRank<VertexProperty>::gen_updates()
     }
 
     {
-      ScopedOperationProfile profile_scope(profiler, "pr_gen_scatter_updates");
+      ScopedOperationProfile profile_scope(profiler, "pr_gen_scatter_updates_atomic_add");
       galois::do_all(
           galois::iterate(size_t(0), edge_contribs.size()),
           [&](size_t idx)
@@ -351,12 +351,12 @@ void PageRank<VertexProperty>::gen_updates()
   std::vector<std::pair<GNode, VertexProperty>> edge_contribs;
 
   {
-    ScopedOperationProfile profile_scope(profiler, "pr_gen_collect_sources");
+    ScopedOperationProfile profile_scope(profiler, "pr_gen_collect_sources_vec_gnode");
     updated_vertices = this->vertex_properties.getUpdatedVertices();
   }
 
   {
-    ScopedOperationProfile profile_scope(profiler, "pr_gen_collect_edge_contribs");
+    ScopedOperationProfile profile_scope(profiler, "pr_gen_collect_edge_contribs_vec_pair");
     size_t total_edges = 0;
     for (const GNode lid : updated_vertices)
     {
@@ -379,7 +379,7 @@ void PageRank<VertexProperty>::gen_updates()
   }
 
   {
-    ScopedOperationProfile profile_scope(profiler, "pr_gen_scatter_updates");
+    ScopedOperationProfile profile_scope(profiler, "pr_gen_scatter_updates_atomic_add");
     galois::do_all(
         galois::iterate(size_t(0), edge_contribs.size()),
         [&](size_t idx)
@@ -399,7 +399,7 @@ void PageRank<VertexProperty>::update_frontier()
   // galois::substrate::SimpleLock lock;
   // galois::ThreadSafeOrderedSet<GNode> &updated_vertices = this->vertex_updates.getUpdatedVertices();
   if (!this->pr_internal_profile_enabled_ || this->runtime_profiler_ == nullptr ||
-      !this->runtime_profiler_->hasOperation("pr_frontier_collect_candidates"))
+      !this->runtime_profiler_->hasOperation("pr_frontier_collect_candidates_vec_gnode_bitset"))
   {
     std::vector<GNode> updated_vertices = this->vertex_updates.getUpdatedVertices();
     galois::do_all(
@@ -425,20 +425,20 @@ void PageRank<VertexProperty>::update_frontier()
 
   RuntimeProfiler& profiler = *this->runtime_profiler_;
 
-  if (this->pr_fine_profile_enabled_ && this->runtime_profiler_->hasOperation("pr_frontier_set_bits"))
+  if (this->pr_fine_profile_enabled_ && this->runtime_profiler_->hasOperation("pr_frontier_set_bits_bitset_set"))
   {
     std::vector<GNode> updated_vertices;
     galois::DynamicBitSet active_candidates;
     std::vector<GNode> active_vertices;
 
     {
-      ScopedOperationProfile profile_scope(profiler, "pr_frontier_collect_candidates");
+      ScopedOperationProfile profile_scope(profiler, "pr_frontier_collect_candidates_vec_gnode_bitset");
       updated_vertices = this->vertex_updates.getUpdatedVertices();
       active_candidates.resize(this->worker->num_vertices);
     }
 
     {
-      ScopedOperationProfile profile_scope(profiler, "pr_frontier_select_active");
+      ScopedOperationProfile profile_scope(profiler, "pr_frontier_select_active_bitset_mask");
       galois::do_all(
           galois::iterate(updated_vertices.begin(), updated_vertices.end()),
           [&](GNode lid)
@@ -457,7 +457,7 @@ void PageRank<VertexProperty>::update_frontier()
     active_vertices = active_candidates.getOffsets();
 
     {
-      ScopedOperationProfile profile_scope(profiler, "pr_frontier_set_bits");
+      ScopedOperationProfile profile_scope(profiler, "pr_frontier_set_bits_bitset_set");
       galois::do_all(
           galois::iterate(active_vertices.begin(), active_vertices.end()),
           [&](GNode lid)
@@ -470,7 +470,7 @@ void PageRank<VertexProperty>::update_frontier()
     }
 
     {
-      ScopedOperationProfile profile_scope(profiler, "pr_frontier_store_prev_updates");
+      ScopedOperationProfile profile_scope(profiler, "pr_frontier_store_prev_updates_vec_store");
       galois::do_all(
           galois::iterate(active_vertices.begin(), active_vertices.end()),
           [&](GNode lid)
@@ -489,13 +489,13 @@ void PageRank<VertexProperty>::update_frontier()
   galois::DynamicBitSet active_candidates;
 
   {
-    ScopedOperationProfile profile_scope(profiler, "pr_frontier_collect_candidates");
+    ScopedOperationProfile profile_scope(profiler, "pr_frontier_collect_candidates_vec_gnode_bitset");
     updated_vertices = this->vertex_updates.getUpdatedVertices();
     active_candidates.resize(this->worker->num_vertices);
   }
 
   {
-    ScopedOperationProfile profile_scope(profiler, "pr_frontier_select_active");
+    ScopedOperationProfile profile_scope(profiler, "pr_frontier_select_active_bitset_mask");
     galois::do_all(
         galois::iterate(updated_vertices.begin(), updated_vertices.end()),
         [&](GNode lid)
@@ -512,7 +512,7 @@ void PageRank<VertexProperty>::update_frontier()
   }
 
   {
-    ScopedOperationProfile profile_scope(profiler, "pr_frontier_commit_active");
+    ScopedOperationProfile profile_scope(profiler, "pr_frontier_commit_active_vec_gnode");
     const std::vector<GNode> active_vertices = active_candidates.getOffsets();
     galois::do_all(
         galois::iterate(active_vertices.begin(), active_vertices.end()),

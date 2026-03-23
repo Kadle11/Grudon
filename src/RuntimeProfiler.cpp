@@ -23,31 +23,31 @@ constexpr std::array<const char*, 8> kOperationNames = {
     "host_update_frontier"};
 
 constexpr std::array<const char*, 9> kPageRankInternalOperationNames = {
-    "pr_apply_collect_frontier",
-    "pr_apply_filter_updates",
-    "pr_apply_commit_updates",
-    "pr_gen_collect_sources",
-    "pr_gen_collect_edge_contribs",
-    "pr_gen_scatter_updates",
-    "pr_frontier_collect_candidates",
-    "pr_frontier_select_active",
-    "pr_frontier_commit_active"};
+    "pr_apply_collect_frontier_vec_gnode_bitset",
+    "pr_apply_filter_updates_bitset_mask",
+    "pr_apply_commit_updates_vec_gnode",
+    "pr_gen_collect_sources_vec_gnode",
+    "pr_gen_collect_edge_contribs_vec_pair",
+    "pr_gen_scatter_updates_atomic_add",
+    "pr_frontier_collect_candidates_vec_gnode_bitset",
+    "pr_frontier_select_active_bitset_mask",
+    "pr_frontier_commit_active_vec_gnode"};
 
 constexpr std::array<const char*, 14> kPageRankFineOperationNames = {
-    "pr_apply_collect_frontier",
-    "pr_apply_filter_updates",
-    "pr_apply_load_active_updates",
-    "pr_apply_accumulate_pr",
-    "pr_apply_recompute_property",
-    "pr_apply_clear_buffers",
-    "pr_gen_collect_sources",
-    "pr_gen_count_edges",
-    "pr_gen_expand_edge_contribs",
-    "pr_gen_scatter_updates",
-    "pr_frontier_collect_candidates",
-    "pr_frontier_select_active",
-    "pr_frontier_set_bits",
-    "pr_frontier_store_prev_updates"};
+    "pr_apply_collect_frontier_vec_gnode_bitset",
+    "pr_apply_filter_updates_bitset_mask",
+    "pr_apply_load_active_updates_vec_value",
+    "pr_apply_accumulate_pr_atomic_add",
+    "pr_apply_recompute_property_vec_store",
+    "pr_apply_clear_buffers_vec_zero",
+    "pr_gen_collect_sources_vec_gnode",
+    "pr_gen_count_edges_scalar_u64",
+    "pr_gen_expand_edge_contribs_vec_pair",
+    "pr_gen_scatter_updates_atomic_add",
+    "pr_frontier_collect_candidates_vec_gnode_bitset",
+    "pr_frontier_select_active_bitset_mask",
+    "pr_frontier_set_bits_bitset_set",
+    "pr_frontier_store_prev_updates_vec_store"};
 
 [[nodiscard]] std::string normalizeAsciiLower(std::string value)
 {
@@ -61,6 +61,8 @@ constexpr std::array<const char*, 14> kPageRankFineOperationNames = {
 
   return value;
 }
+
+[[nodiscard]] bool parseEnvFlag(const char* name, bool fallback);
 
 [[nodiscard]] bool hasPrefix(const std::string& value, const char* prefix)
 {
@@ -91,6 +93,24 @@ constexpr std::array<const char*, 14> kPageRankFineOperationNames = {
   }
 
   return true;
+}
+
+[[nodiscard]] bool shouldTrackBaseOperations(
+    const std::string& algorithm_name,
+    const bool pr_internal_enabled,
+    const std::string& selected_phase)
+{
+  if (algorithm_name != "PageRank" || !pr_internal_enabled)
+  {
+    return true;
+  }
+
+  if (selected_phase.empty() || selected_phase == "all")
+  {
+    return true;
+  }
+
+  return parseEnvFlag("GRUDON_PR_PROFILE_INCLUDE_BASE", false);
 }
 
 [[nodiscard]] bool parseEnvFlag(const char* name, bool fallback)
@@ -184,18 +204,29 @@ RuntimeProfiler::RuntimeProfiler(const std::string& algorithm_name, const uint32
   enabled_ = parseEnvFlag("GRUDON_ENABLE_PERF_PROFILE", true);
   pr_internal_enabled_ = parseEnvFlag("GRUDON_ENABLE_PR_INTERNAL_PROFILE", false);
   pr_fine_enabled_ = parseEnvFlag("GRUDON_ENABLE_PR_FINE_PROFILE", false);
+
+  const std::string selected_phase = normalizeAsciiLower(parseEnvString("GRUDON_PR_PROFILE_PHASE", "all"));
+  const bool phase_filtered_pr_internal =
+      (algorithm_name_ == "PageRank" && pr_internal_enabled_ && selected_phase != "all");
+  const bool track_base_operations = shouldTrackBaseOperations(algorithm_name_, pr_internal_enabled_, selected_phase);
+
+  // Phase-filtered PR internal runs are intended to be lightweight by default.
+  // Large perf trace/callgraph dumps can trigger OOM at shutdown on long runs.
+  write_trace_enabled_ = parseEnvFlag("GRUDON_PERF_WRITE_TRACE", !phase_filtered_pr_internal);
+
   output_dir_ = parseEnvString("GRUDON_PROFILE_OUTPUT_DIR", "output");
   output_prefix_ = parseEnvString("GRUDON_PROFILE_PREFIX", "grudon");
 
-  for (const char* op_name : baseOperationNames())
+  if (track_base_operations)
   {
-    operation_names_.emplace_back(op_name);
+    for (const char* op_name : baseOperationNames())
+    {
+      operation_names_.emplace_back(op_name);
+    }
   }
 
   if (algorithm_name_ == "PageRank" && pr_internal_enabled_)
   {
-    const std::string selected_phase = normalizeAsciiLower(parseEnvString("GRUDON_PR_PROFILE_PHASE", "all"));
-
     if (pr_fine_enabled_)
     {
       for (const char* op_name : kPageRankFineOperationNames)
@@ -225,7 +256,7 @@ RuntimeProfiler::RuntimeProfiler(const std::string& algorithm_name, const uint32
   }
 
 #if defined(GRUDON_ENABLE_PERF_CPP)
-  callgraph_enabled_ = parseEnvFlag("GRUDON_PERF_ENABLE_CALLGRAPH", true);
+  callgraph_enabled_ = parseEnvFlag("GRUDON_PERF_ENABLE_CALLGRAPH", !phase_filtered_pr_internal);
   callgraph_max_depth_ = parseEnvU16("GRUDON_PERF_CALLGRAPH_MAX_DEPTH", 0);
   initPerfCpp();
 #endif
@@ -289,7 +320,7 @@ void RuntimeProfiler::stopIteration()
 void RuntimeProfiler::writeTrace()
 {
 #if defined(GRUDON_ENABLE_PERF_CPP)
-  if (!enabled_ || !sampler_ready_)
+  if (!enabled_ || !write_trace_enabled_ || !sampler_ready_)
   {
     return;
   }
@@ -447,6 +478,9 @@ void RuntimeProfiler::writeJson(
 
   json << "{\n";
   json << "  \"algorithm\": \"" << jsonEscape(algorithm_name_) << "\",\n";
+    json << "  \"selected_phase\": \""
+      << jsonEscape(normalizeAsciiLower(parseEnvString("GRUDON_PR_PROFILE_PHASE", "all")))
+      << "\",\n";
   json << "  \"rank\": " << rank_ << ",\n";
   json << "  \"world_size\": " << world_size << ",\n";
   json << "  \"node_type\": \"" << (node_type == COMPUTE_NODE ? "compute" : "memory") << "\",\n";
