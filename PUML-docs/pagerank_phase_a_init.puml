@@ -1,0 +1,62 @@
+@startuml
+' PageRank Phase A - Initialization
+
+title <size:22><b>PageRank Hardware API Mapping</b></size>\n<size:14>Phase A: Initialization</size>
+
+skinparam sequenceMessageAlign center
+skinparam responseMessageBelowArrow true
+skinparam shadowing false
+skinparam dpi 160
+skinparam defaultFontName "DejaVu Sans"
+skinparam defaultFontSize 13
+skinparam ArrowThickness 3
+skinparam ArrowColor #2E3440
+skinparam ParticipantPadding 24
+skinparam BoxPadding 10
+skinparam RoundCorner 10
+
+skinparam sequence {
+  LifeLineBorderColor #6B7280
+  LifeLineBackgroundColor #F8FAFC
+  GroupBorderColor #64748B
+  GroupBackgroundColor #F8FAFC
+  GroupHeaderFontColor #0F172A
+  GroupHeaderBackgroundColor #E2E8F0
+  MessageAlign center
+}
+
+skinparam note {
+  BackgroundColor #FFF8DB
+  BorderColor #D1A800
+  FontColor #3B2F00
+}
+
+participant "**<color:white>Host (CPU + DRAM)</color>**" as H #A7934B
+participant "**<color:white>CXL Memory Pool + NDP</color>**" as N #4C0099
+
+== <size:16><b>Phase A - Initialization</b></size> ==
+group #FDF4D7 Initialization Vector Setup
+
+note over H
+  <b>[VectorOp] Initialization</b>
+  <code>
+  VertexStateVector[n] = {pr_vals[n], vertex_properties[n]}
+
+  VertexStateVector <- {(1 - D), D * (1 - D) / out_deg[n]}
+  FrontierVector    <- [1..N]
+  UpdateVector      <- [0, 0, ..., 0]
+  </code>
+end note
+
+note over N
+  <b>[VectorOp] Initialization</b>
+  <code>
+  LocalVertexStateVector[n] <- {pr_vals[n], vertex_properties[n]} <- {0, 0}
+  LocalUpdateVector         <- [0, 0, ..., 0]
+  </code>
+end note
+
+H -> N : **Operation**: CXL-Write, **Payload**: Initial Vectors (VertexState, Frontier, Update)
+end
+
+@enduml

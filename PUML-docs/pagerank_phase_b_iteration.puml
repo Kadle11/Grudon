@@ -1,0 +1,104 @@
+@startuml
+' PageRank Phase B - Main Iteration Loop
+
+title <size:22><b>PageRank Hardware API Mapping</b></size>\n<size:14>Phase B: Main Iteration Loop</size>
+
+skinparam sequenceMessageAlign center
+skinparam responseMessageBelowArrow true
+skinparam shadowing false
+skinparam dpi 160
+skinparam defaultFontName "DejaVu Sans"
+skinparam defaultFontSize 13
+skinparam ArrowThickness 3
+skinparam ArrowColor #2E3440
+skinparam ParticipantPadding 24
+skinparam BoxPadding 10
+skinparam RoundCorner 10
+
+skinparam sequence {
+  LifeLineBorderColor #6B7280
+  LifeLineBackgroundColor #F8FAFC
+  GroupBorderColor #64748B
+  GroupBackgroundColor #F8FAFC
+  GroupHeaderFontColor #0F172A
+  GroupHeaderBackgroundColor #E2E8F0
+  MessageAlign center
+}
+
+skinparam note {
+  BackgroundColor #FFF8DB
+  BorderColor #D1A800
+  FontColor #3B2F00
+}
+
+participant "**<color:white>Host (CPU + DRAM)</color>**" as H #A7934B
+participant "**<color:white>CXL Memory Pool + NDP</color>**" as N #4C0099
+
+== <size:16><b>Phase B - Main Iteration Loop</b></size> ==
+loop while worker_completion_count != num_compute AND iteration < max_iterations
+
+  group #E6F1FF Step 1 - Host Sends Updated Frontier and Vertex-State to NDP
+  note over H
+    Using the Active Frontier, Build Partitioned Payloads
+    for each CCM partition
+  end note
+
+  H -> N : **Operation**: CXL-Write, **Payload**: Frontier Mask Vector
+  H -> N : **Operation**: CXL-Write, **Payload**: Vertex-State Vector
+  note over N
+    Receive Vectors to Sync Local Vertex-State with Host
+  end note
+  end
+
+  group #F0E8FF Step 2 - Graph Traversal on NDP
+
+  H -> N : **Operation**: PageRank Traversal Kernel, **Payload**: Data Addrs
+  note over N
+    <b>[VectorOp] Graph Traversal and Update Vector Accumulation</b>
+    <code>
+    for each neighbor in out_neighbors(vertex):
+        LocalUpdateVector[neighbor] += D * VertexStateVector[vertex] / out_deg[vertex]
+    </code>
+  end note
+  end
+
+  group #E9FBEF Step 3 - NDP Sends Partial Updates to Host for Aggregation
+  note over N
+    Partition Local Update Vector by Destination Compute Node
+  end note
+
+  N -> H : **Operation**: CXL-Read, **Payload**: Vertex Mask Vector 
+  N -> H : **Operation**: CXL-Read, **Payload**: Update Vector 
+
+  note over H
+    <b>[VectorOp] Aggregate updates from all NDP partitions </b>
+    <code>
+    UpdateVector[vertex] += PartitionUpdate[partition, vertex]
+    </code>
+  end note
+  end
+
+  group #FFF2E5 Step 4 - Host Applies Updates and Rebuilds Frontier
+
+  note over H
+
+    <b>[VectorOp] Update Frontier</b>
+    <code>
+    FrontierVector = threshold(UpdateVector)
+    </code>
+
+    <b>[VectorOp] Apply Updates </b>
+    <code>
+    pr_vals[n] += UpdateVector[n]
+    vertex_properties[n] = D * UpdateVector[n] / out_deg[n]
+    </code>
+  end note
+  end
+  
+  group #F1F5F9 Step 5 - Global Termination Vote
+  H <-> N : ("Global Completion Reduce", {operation: "SUM", values: completion_flags[]})
+  end
+
+end
+
+@enduml
