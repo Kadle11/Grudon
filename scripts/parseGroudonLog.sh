@@ -12,9 +12,18 @@ BEGIN {
     max_cphase1 = 0;
     max_cphase2 = 0;
     runtime = 0;
+    traversal_count = 0;
+    max_traversal = 0;
 }
-$3 ~ /TraversalTimer/ && $5 > max_traversal { 
-    max_traversal = $5 
+$3 ~ /TraversalTimer/ {
+    traversal_count++;
+    if (traversal_count <= 3) {
+        if ($5 > max_traversal) {
+            max_traversal = $5;
+        }
+    } else if (traversal_count == 4) {
+        max_traversal += $5;
+    }
 }
 $3 ~ /UpdateTimer/ && $5 > max_update { 
     max_update = $5 

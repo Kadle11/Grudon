@@ -1,4 +1,4 @@
-rank 0=aries1 slot=0,2
-rank 1=aries1 slot=20,21,22,23
-rank 2=aries1 slot=40,41,42,43
-rank 3=aries1 slot=60,61,62,63
+rank 0=aries1 slot=0,2,4,6,8,10
+rank 1=aries1 slot=20,21,22,23,24,25,26,27,28,29,30,31
+rank 2=aries1 slot=40,41,42,43,44,45,46,47,48,49,50,51
+rank 3=aries1 slot=60,61,62,63,64,65,66,67,68,69,70,71
