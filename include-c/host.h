@@ -11,4 +11,6 @@
 
 #define MAX_ITERATIONS 1000
 
+CXL_Graph* read_graph(const char* filename);
+
 #endif // HOST_H
