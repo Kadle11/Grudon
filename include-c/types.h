@@ -11,8 +11,9 @@ typedef uint32_t vid_t;
 
 // Vertex Properties
 typedef struct {
-    float pr;          
-    float delta;       
+    float pr;          // NOTE: the code uses this as the 'push' contribution value!
+    float delta;       // The accumulated residual
+    float score;       // The actual PageRank score
     float update_sum;  
 } VProp;
 

@@ -13,4 +13,9 @@
 
 CXL_Graph* read_graph(const char* filename);
 
+typedef struct {
+    vid_t vertex_id;
+    float score;
+} RankPair;
+
 #endif // HOST_H
