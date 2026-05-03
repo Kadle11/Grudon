@@ -9,7 +9,6 @@ This directory contains a C-based implementation of a PageRank emulation over CX
 - `read_graph.c` - Utilities to read `.mtx` files into the core CXL Graph structures.
 - `cxl_utils.c` - Mocking/utilities for CXL memory and command passing.
 - `sorting.c` - Utility functions for sorting.
-- `soc-LiveJournal1/` - Contains the dataset to test with.
 
 ## Prerequisites
 
