@@ -32,6 +32,7 @@ void cxl_send_cmd(const command_entry_t* cmd)
   run_ndp_job(cmd);
 }
 
+// Host-Device Data Transfer Wrapper
 void cxl_memcpy_to_device(void* cxl_dest, const void* host_src, size_t size)
 {
   cxl_flush_range(cxl_dest, size);
@@ -39,6 +40,7 @@ void cxl_memcpy_to_device(void* cxl_dest, const void* host_src, size_t size)
   cxl_flush_range(cxl_dest, size);
 }
 
+// Device to Host data transfer wrapper
 void cxl_memcpy_to_host(void* host_dest, const void* cxl_src, size_t size)
 {
   cxl_flush_range(cxl_src, size);

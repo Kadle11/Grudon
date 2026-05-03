@@ -18,6 +18,7 @@ typedef struct
   float update_sum;
 } VProp;
 
+// RankPair for sorting final output
 typedef struct
 {
   vid_t vertex_id;
@@ -36,6 +37,7 @@ typedef struct
   int* out_degree;
 } CXL_Graph;
 
+// Command structure for NDP offload
 typedef struct
 {
   uint32_t cid;
