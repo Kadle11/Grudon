@@ -73,9 +73,9 @@ CXL_Graph* read_graph(const char* filename)
   free(dsts);
   free(next_pos);
 
-  cxl_flush(graph->row_ptr, (num_vertices + 1) * sizeof(size_t));
-  cxl_flush(graph->col_idx, num_edges * sizeof(vid_t));
-  cxl_flush(graph->out_degree, (num_vertices + 1) * sizeof(int));
+  cxl_flush_range(graph->row_ptr, (num_vertices + 1) * sizeof(size_t));
+  cxl_flush_range(graph->col_idx, num_edges * sizeof(vid_t));
+  cxl_flush_range(graph->out_degree, (num_vertices + 1) * sizeof(int));
 
   return graph;
 }

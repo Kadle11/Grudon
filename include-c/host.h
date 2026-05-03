@@ -14,6 +14,6 @@
 
 CXL_Graph* read_graph(const char* filename);
 void init_pagerank(CXL_Graph* graph, VProp* vprop_masters, uint32_t* frontier);
-void quicksort(RankPair* arr, size_t count)
+void quicksort(RankPair* arr, size_t count);
 
 #endif  // HOST_H

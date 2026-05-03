@@ -7,6 +7,7 @@ void run_ndp_job(const command_entry_t* cmd)
   printf("Command CID: %u, Opcode: %d, Num Vertices: %u\n", cmd->cid, cmd->opcode, cmd->num_vertices);
   switch (cmd->opcode)
   {
+    // Handles Generate Updates case for Grudon for PageRank
     case OPCODE_GEN_UPDATES:
       for (vid_t i = 0; i < cmd->num_vertices; ++i)
       {

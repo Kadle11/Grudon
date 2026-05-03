@@ -80,7 +80,7 @@ int main(int argc, char* argv[])
       {
         set_bit(next_frontier, i);
         vprop_masters[i].update_sum = update_val;
-        vprop_masters[i].score += update_val;  // Track ACTUAL score!
+        vprop_masters[i].score += update_val;
         if (graph->out_degree[i] > 0)
         {
           vprop_masters[i].pr = DAMPING_FACTOR * update_val / (float)graph->out_degree[i];
@@ -94,7 +94,7 @@ int main(int argc, char* argv[])
       }
       else
       {
-        vprop_masters[i].pr = 0.0F;  // IMPORTANT: Prevent pushing stale pr again!
+        vprop_masters[i].pr = 0.0F;
       }
 
       // Consume the update so it isn't reprocessed next iteration.
@@ -120,7 +120,6 @@ int main(int argc, char* argv[])
 
   free(next_frontier);
 
-  // Print top 10 ranked vertices by PageRank score
   printf("\n=== Top 10 Ranked Vertices by PageRank ===\n");
 
   // Create array of (vertex_id, pagerank_score) pairs
@@ -131,17 +130,14 @@ int main(int argc, char* argv[])
     ranks[i].score = vprop_masters[i].score;  // Use tracked actual score
   }
 
-  // Sort by score in descending order
   quicksort(ranks, (size_t)graph->num_vertices);
 
-  // Print top 10
   size_t top_count = (graph->num_vertices < 10) ? graph->num_vertices : 10;
   for (size_t i = 0; i < top_count; i++)
   {
     printf("Rank %zu: Vertex %u with PageRank score = %.6f\n", i + 1, ranks[i].vertex_id, ranks[i].score);
   }
 
-  // Clean up
   free(ranks);
 
   free(vprop_masters);
