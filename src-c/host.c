@@ -55,8 +55,6 @@ int main(int argc, char* argv[])
 
   while (iteration < MAX_ITERATIONS)
   {
-    printf("Iteration %d: Offloading PageRank update generation to CXL...\n", iteration);
-
     command_entry_t cmd = { .cid = iteration,
                             .opcode = OPCODE_GEN_UPDATES,
                             .num_vertices = graph->num_vertices,
@@ -66,7 +64,6 @@ int main(int argc, char* argv[])
 
     cxl_send_cmd(&cmd);
     cxl_wait_done(cmd.cid);
-    printf("Iteration %d: NDP job completed. Processing updates on host...\n", iteration);
 
     // Read back updated vertex properties from CXL memory
     cxl_memcpy_to_host(vprop_masters, vprop_mirrors, graph->num_vertices * sizeof(VProp));
@@ -114,7 +111,6 @@ int main(int argc, char* argv[])
       break;
     }
 
-    printf("Active vertices remain %d, proceeding to iteration %d\n", active_count, iteration + 1);
     iteration++;
   }
 
