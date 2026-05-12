@@ -35,6 +35,10 @@ typedef struct
   size_t* row_ptr;
   vid_t* col_idx;
   int* out_degree;
+  // Symmetric CSR (undirected view). When present use these for undirected algorithms.
+  size_t* row_ptr_sym;
+  vid_t* col_idx_sym;
+  int is_symmetric;
 } CXL_Graph;
 
 // Command structure for NDP offload
@@ -48,7 +52,9 @@ typedef struct
   CXL_Graph* graph;
 } command_entry_t;
 
-#define OPCODE_GEN_UPDATES 1
+#define OPCODE_GEN_UPDATES_PR 1
+#define OPCODE_GEN_UPDATES_CC 2
+#define OPCODE_GEN_UPDATES_SSSP 3
 
 // Bitmask Helpers
 static inline void set_bit(uint32_t* mask, vid_t u)

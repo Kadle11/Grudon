@@ -23,6 +23,9 @@ void cxl_wait_done(uint32_t cid);
 /**
  * Simplified `worker_thread` function for serial, single responsibility tasks
  */
+void gen_updates_pagerank(const command_entry_t* cmd);
+void gen_updates_connected_components(const command_entry_t* cmd);
+void gen_updates_sssp(const command_entry_t* cmd);
 void run_ndp_job(const command_entry_t* cmd);
 
 /**

@@ -35,6 +35,9 @@ CXL_Graph* read_graph(const char* filename)
   graph->row_ptr = (size_t*)cxl_calloc(num_vertices + 1, sizeof(size_t));
   graph->col_idx = (vid_t*)cxl_malloc(num_edges * sizeof(vid_t));
   graph->out_degree = (int*)cxl_calloc(num_vertices + 1, sizeof(int));
+  graph->row_ptr_sym = NULL;
+  graph->col_idx_sym = NULL;
+  graph->is_symmetric = 0;
 
   vid_t* srcs = (vid_t*)malloc(num_edges * sizeof(vid_t));
   vid_t* dsts = (vid_t*)malloc(num_edges * sizeof(vid_t));
@@ -45,7 +48,27 @@ CXL_Graph* read_graph(const char* filename)
   while (fgets(line, sizeof(line), file) && edge_idx < num_edges)
   {
     vid_t src, dst;
-    sscanf(line, "%u %u", &src, &dst);
+    if (sscanf(line, "%u %u", &src, &dst) != 2)
+      continue;
+
+    /* Convert from 1-based MatrixMarket indices to 0-based internal indices. */
+    if (src == 0 || dst == 0)
+    {
+      /* If file already contains 0-based indices, keep them as-is. */
+      /* Nothing to do */
+    }
+    else
+    {
+      src -= 1;
+      dst -= 1;
+    }
+
+    if (src >= num_vertices || dst >= num_vertices)
+    {
+      fprintf(stderr, "Edge indices out of bounds: %u -> %u (n=%u)\n", src, dst, num_vertices);
+      continue;
+    }
+
     srcs[edge_idx] = src;
     dsts[edge_idx] = dst;
     graph->out_degree[src]++;
@@ -76,6 +99,67 @@ CXL_Graph* read_graph(const char* filename)
   cxl_flush_range(graph->row_ptr, (num_vertices + 1) * sizeof(size_t));
   cxl_flush_range(graph->col_idx, num_edges * sizeof(vid_t));
   cxl_flush_range(graph->out_degree, (num_vertices + 1) * sizeof(int));
+
+  // If filename already indicates symmetric (.sgr) we can treat forward CSR as symmetric.
+  const char* dot = strrchr(filename, '.');
+  if (dot && strcmp(dot, ".sgr") == 0)
+  {
+    graph->row_ptr_sym = graph->row_ptr;
+    graph->col_idx_sym = graph->col_idx;
+    graph->is_symmetric = 1;
+    return graph;
+  }
+
+  // Otherwise build symmetric CSR (duplicate edges in reverse).
+  {
+    // compute symmetric degrees
+    size_t sym_edges = edge_idx * 2;
+    size_t* deg_sym = (size_t*)calloc(num_vertices + 1, sizeof(size_t));
+    // srcs and dsts are freed above; re-read edges from graph->col_idx by scanning forward CSR
+    for (vid_t u = 0; u < (vid_t)num_vertices; ++u)
+    {
+      for (size_t p = graph->row_ptr[u]; p < graph->row_ptr[u + 1]; ++p)
+      {
+        vid_t v = graph->col_idx[p];
+        deg_sym[u]++;
+        deg_sym[v]++;
+      }
+    }
+
+    // allocate symmetric CSR
+    graph->row_ptr_sym = (size_t*)cxl_calloc(num_vertices + 1, sizeof(size_t));
+    graph->col_idx_sym = (vid_t*)cxl_malloc(sym_edges * sizeof(vid_t));
+
+    // prefix sum
+    for (vid_t v = 1; v <= (vid_t)num_vertices; ++v)
+    {
+      graph->row_ptr_sym[v] = graph->row_ptr_sym[v - 1] + deg_sym[v - 1];
+    }
+
+    // temporary next positions
+    size_t* next_sym = (size_t*)malloc(num_vertices * sizeof(size_t));
+    memcpy(next_sym, graph->row_ptr_sym, num_vertices * sizeof(size_t));
+
+    for (vid_t u = 0; u < (vid_t)num_vertices; ++u)
+    {
+      for (size_t p = graph->row_ptr[u]; p < graph->row_ptr[u + 1]; ++p)
+      {
+        vid_t v = graph->col_idx[p];
+        size_t pos_uv = next_sym[u]++;
+        graph->col_idx_sym[pos_uv] = v;
+        size_t pos_vu = next_sym[v]++;
+        graph->col_idx_sym[pos_vu] = u;
+      }
+    }
+
+    free(next_sym);
+    free(deg_sym);
+
+    cxl_flush_range(graph->row_ptr_sym, (num_vertices + 1) * sizeof(size_t));
+    cxl_flush_range(graph->col_idx_sym, sym_edges * sizeof(vid_t));
+
+    graph->is_symmetric = 1;
+  }
 
   return graph;
 }

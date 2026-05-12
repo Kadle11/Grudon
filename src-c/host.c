@@ -1,10 +1,11 @@
+#include <float.h>
 #include "../include-c/host.h"
 
 int main(int argc, char* argv[])
 {
-  if (argc < 2)
+  if (argc < 3)
   {
-    (void)fprintf(stderr, "Usage: %s <graph_file.mtx>\n", argv[0]);
+    (void)fprintf(stderr, "Usage: %s <graph_file.mtx> <algorithm>\n", argv[0]);
     return EXIT_FAILURE;
   }
 
@@ -16,12 +17,14 @@ int main(int argc, char* argv[])
 
   // Setting up CXL Graph
   const char* graph_file = argv[1];
+  const char* algorithm = argv[2];
   CXL_Graph* graph = read_graph(graph_file);
 
   if (!graph)
   {
     return EXIT_FAILURE;
   }
+
 
   printf("Graph loaded: %u vertices, %zu edges\n", graph->num_vertices, graph->num_edges);
   size_t mask_size = ((graph->num_vertices + 31) / 32);
@@ -36,7 +39,23 @@ int main(int argc, char* argv[])
   VProp* vprop_mirrors = (VProp*)cxl_malloc(graph->num_vertices * sizeof(VProp));
   uint32_t* frontier_ndp = (uint32_t*)cxl_malloc((mask_size * sizeof(uint32_t)));
 
-  init_pagerank(graph, vprop_masters, frontier_host);
+  if (strcmp(algorithm, "pr") == 0)
+  {
+    init_pagerank(graph, vprop_masters, frontier_host);
+  }
+  else if (strcmp(algorithm, "cc") == 0)
+  {
+    init_connected_components(graph, vprop_masters, frontier_host);
+  }
+  else if (strcmp(algorithm, "sssp") == 0)
+  {
+    init_sssp(graph, vprop_masters, frontier_host);
+  }
+  else
+  {
+    fprintf(stderr, "Unsupported algorithm: %s\n", algorithm);
+    return EXIT_FAILURE;
+  }
 
   cxl_memcpy_to_device(vprop_mirrors, vprop_masters, graph->num_vertices * sizeof(VProp));
   cxl_memcpy_to_device(frontier_ndp, frontier_host, ((mask_size * sizeof(uint32_t))));
@@ -51,12 +70,20 @@ int main(int argc, char* argv[])
   /////////////////////////////////////////////////////////////////////////////
 
   int iteration = 0;
+  int opcode = 0;
+  switch (algorithm[0])
+  {
+    case 'p': printf("Running PageRank...\n"); opcode = OPCODE_GEN_UPDATES_PR; break;
+    case 'c': printf("Running Connected Components...\n"); opcode = OPCODE_GEN_UPDATES_CC; break;
+    case 's': printf("Running SSSP...\n"); opcode = OPCODE_GEN_UPDATES_SSSP; break;
+    default: fprintf(stderr, "Unsupported algorithm: %s\n", algorithm); return EXIT_FAILURE;
+  }
   uint32_t* next_frontier = (uint32_t*)calloc(mask_size, sizeof(uint32_t));
 
   while (iteration < MAX_ITERATIONS)
   {
     command_entry_t cmd = { .cid = iteration,
-                            .opcode = OPCODE_GEN_UPDATES,
+                            .opcode = opcode,
                             .num_vertices = graph->num_vertices,
                             .frontier_ndp = frontier_ndp,
                             .vprops_mirror = vprop_mirrors,
@@ -67,45 +94,26 @@ int main(int argc, char* argv[])
 
     // Read back updated vertex properties from CXL memory
     cxl_memcpy_to_host(vprop_masters, vprop_mirrors, graph->num_vertices * sizeof(VProp));
-    int any_set = 0;
-    int active_count = 0;
-
-    for (vid_t i = 0; i < graph->num_vertices; ++i)
+    
+    int update_count = 0;
+    switch (opcode)
     {
-      float update_val = vprop_masters[i].delta;
-      if (update_val > THRESHOLD)
-      {
-        set_bit(next_frontier, i);
-        vprop_masters[i].update_sum = update_val;
-        vprop_masters[i].score += update_val;
-        if (graph->out_degree[i] > 0)
-        {
-          vprop_masters[i].pr = DAMPING_FACTOR * update_val / (float)graph->out_degree[i];
-        }
-        else
-        {
-          vprop_masters[i].pr = 0.0F;
-        }
-        any_set = 1;
-        active_count++;
-      }
-      else
-      {
-        vprop_masters[i].pr = 0.0F;
-      }
-
-      // Consume the update so it isn't reprocessed next iteration.
-      vprop_masters[i].delta = 0.0F;
+      case OPCODE_GEN_UPDATES_PR:
+        update_count = apply_updates_pagerank(graph, vprop_masters, frontier_host);
+        break;
+      case OPCODE_GEN_UPDATES_CC:
+        update_count = apply_updates_connected_components(graph, vprop_masters, frontier_host);
+        break;
+      case OPCODE_GEN_UPDATES_SSSP:
+        update_count = apply_updates_sssp(graph, vprop_masters, frontier_host);
+        break;
     }
-
-    // Copy updated frontier and vprops back to CXL memory for the next NDP job
-    memcpy(frontier_host, next_frontier, mask_size * sizeof(uint32_t));
 
     cxl_memcpy_to_device(frontier_ndp, frontier_host, mask_size * sizeof(uint32_t));
     cxl_memcpy_to_device(vprop_mirrors, vprop_masters, graph->num_vertices * sizeof(VProp));
 
     // Break early if no vertices are active
-    if (!any_set)
+    if (update_count == 0)
     {
       printf("No active vertices remaining, terminating at iteration %d\n", iteration);
       break;
@@ -115,33 +123,73 @@ int main(int argc, char* argv[])
   }
 
   free(next_frontier);
-
-  printf("\n=== Top 10 Ranked Vertices by PageRank ===\n");
-
-  // Create array of (vertex_id, pagerank_score) pairs
-  RankPair* ranks = (RankPair*)malloc(graph->num_vertices * sizeof(RankPair));
-  for (vid_t i = 0; i < graph->num_vertices; i++)
+  if (strcmp(algorithm, "pr") == 0) 
   {
-    ranks[i].vertex_id = i;
-    ranks[i].score = vprop_masters[i].score;  // Use tracked actual score
-  }
+    printf("\n=== Top 10 Ranked Vertices by PageRank ===\n");
+    // Create array of (vertex_id, pagerank_score) pairs
+    RankPair* ranks = (RankPair*)malloc(graph->num_vertices * sizeof(RankPair));
+    for (vid_t i = 0; i < graph->num_vertices; i++)
+    {
+      ranks[i].vertex_id = i;
+      ranks[i].score = vprop_masters[i].score;  // Use tracked actual score
+    }
 
-  quicksort(ranks, (size_t)graph->num_vertices);
+    quicksort(ranks, (size_t)graph->num_vertices);
 
-  size_t top_count = (graph->num_vertices < 10) ? graph->num_vertices : 10;
-  for (size_t i = 0; i < top_count; i++)
+    size_t top_count = (graph->num_vertices < 10) ? graph->num_vertices : 10;
+    for (size_t i = 0; i < top_count; i++)
+    {
+      printf("Rank %zu: Vertex %u with PageRank score = %.6f\n", i + 1, ranks[i].vertex_id, ranks[i].score);
+    }
+    free(ranks);
+
+  } else if (strcmp(algorithm, "cc") == 0)
   {
-    printf("Rank %zu: Vertex %u with PageRank score = %.6f\n", i + 1, ranks[i].vertex_id, ranks[i].score);
+    printf("\n=== No of Connected Components ===\n");
+    // Count unique component IDs
+    size_t* component_counts = (size_t*)calloc(graph->num_vertices, sizeof(size_t));
+    size_t num_components = 0;
+    for (vid_t i = 0; i < graph->num_vertices; i++)
+    {
+      uint32_t comp_id = (uint32_t)vprop_masters[i].score;
+      if (component_counts[comp_id] == 0)
+      {
+        num_components++;
+        component_counts[comp_id] = 1;
+      }
+    }
+    printf("Total Connected Components: %zu\n", num_components);
+    free(component_counts);
+  } else if (strcmp(algorithm, "sssp") == 0)
+  {
+    printf("\n=== SSSP Results ===\n");
+    // Report simple statistics: number of reachable vertices and maximum distance
+    size_t reachable = 0;
+    float max_dist = 0.0f;
+    for (vid_t i = 0; i < graph->num_vertices; i++)
+    {
+      float d = vprop_masters[i].score;
+      if (d < FLT_MAX)
+      {
+        reachable++;
+        if (d > max_dist) max_dist = d;
+      }
+    }
+    printf("Reachable vertices: %zu / %u\n", reachable, graph->num_vertices);
+    printf("Max distance (float): %.6f\n", max_dist);
   }
-
-  free(ranks);
-
   free(vprop_masters);
   free(frontier_host);
 
   cxl_free(frontier_ndp);
   cxl_free(vprop_mirrors);
-
+  // Free graph buffers. If symmetric CSR was built separately, free it too.
+  if (graph->is_symmetric && graph->row_ptr_sym && graph->col_idx_sym &&
+      !(graph->row_ptr_sym == graph->row_ptr && graph->col_idx_sym == graph->col_idx))
+  {
+    cxl_free(graph->row_ptr_sym);
+    cxl_free(graph->col_idx_sym);
+  }
   cxl_free(graph->row_ptr);
   cxl_free(graph->col_idx);
   cxl_free(graph->out_degree);

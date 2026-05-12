@@ -24,11 +24,6 @@ A `Makefile` is provided to compile and run the application.
 make
 ```
 
-**To compile AND run the project using the provided dataset (`soc-LiveJournal1.mtx`):**
-```bash
-make run
-```
-
 **To clean up build artifacts:**
 ```bash
 make clean
