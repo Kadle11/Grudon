@@ -3,6 +3,11 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <stdio.h>
+#include <float.h>
+#include <stdbool.h>
+#include <omp.h>
+#include <string.h>
 
 #include "../include-c/types.h"
 

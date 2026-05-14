@@ -12,8 +12,9 @@
 
 #define MAX_ITERATIONS 1000
 
-// Read graph from file and construct CXL_Graph structure
-CXL_Graph* read_graph(const char* filename);
+// Read graph from file and construct CXL_Graph structure.
+// When build_symmetric is non-zero, also materialize reverse edges.
+CXL_Graph* read_graph(const char* filename, int build_symmetric);
 
 // Initialize PageRank vertex properties and frontier
 void init_pagerank(CXL_Graph* graph, VProp* vprop_masters, uint32_t* frontier);

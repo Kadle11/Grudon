@@ -24,6 +24,11 @@ A `Makefile` is provided to compile and run the application.
 make
 ```
 
+**To run the algorithms:**
+```bash
+./run_graph_algorithms <graph_file.mtx> <algorithm> [--symmetric|-s]
+```
+
 **To clean up build artifacts:**
 ```bash
 make clean

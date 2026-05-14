@@ -5,7 +5,7 @@ int main(int argc, char* argv[])
 {
   if (argc < 3)
   {
-    (void)fprintf(stderr, "Usage: %s <graph_file.mtx> <algorithm>\n", argv[0]);
+    (void)fprintf(stderr, "Usage: %s <graph_file.mtx> <algorithm> [--symmetric|-s]\n", argv[0]);
     return EXIT_FAILURE;
   }
 
@@ -18,7 +18,16 @@ int main(int argc, char* argv[])
   // Setting up CXL Graph
   const char* graph_file = argv[1];
   const char* algorithm = argv[2];
-  CXL_Graph* graph = read_graph(graph_file);
+  int build_symmetric = (strcmp(algorithm, "cc") == 0);
+  for (int i = 3; i < argc; ++i)
+  {
+    if (strcmp(argv[i], "--symmetric") == 0 || strcmp(argv[i], "-s") == 0)
+    {
+      build_symmetric = 1;
+    }
+  }
+
+  CXL_Graph* graph = read_graph(graph_file, build_symmetric);
 
   if (!graph)
   {

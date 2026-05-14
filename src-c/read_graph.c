@@ -1,6 +1,53 @@
 #include "../include-c/host.h"
 
-CXL_Graph* read_graph(const char* filename)
+static void build_symmetric_csr(CXL_Graph* graph, size_t num_vertices, size_t edge_count)
+{
+  size_t sym_edges = edge_count * 2;
+  size_t* deg_sym = (size_t*)calloc(num_vertices + 1, sizeof(size_t));
+
+  for (vid_t u = 0; u < (vid_t)num_vertices; ++u)
+  {
+    for (size_t p = graph->row_ptr[u]; p < graph->row_ptr[u + 1]; ++p)
+    {
+      vid_t v = graph->col_idx[p];
+      deg_sym[u]++;
+      deg_sym[v]++;
+    }
+  }
+
+  graph->row_ptr_sym = (size_t*)cxl_calloc(num_vertices + 1, sizeof(size_t));
+  graph->col_idx_sym = (vid_t*)cxl_malloc(sym_edges * sizeof(vid_t));
+
+  for (vid_t v = 1; v <= (vid_t)num_vertices; ++v)
+  {
+    graph->row_ptr_sym[v] = graph->row_ptr_sym[v - 1] + deg_sym[v - 1];
+  }
+
+  size_t* next_sym = (size_t*)malloc(num_vertices * sizeof(size_t));
+  memcpy(next_sym, graph->row_ptr_sym, num_vertices * sizeof(size_t));
+
+  for (vid_t u = 0; u < (vid_t)num_vertices; ++u)
+  {
+    for (size_t p = graph->row_ptr[u]; p < graph->row_ptr[u + 1]; ++p)
+    {
+      vid_t v = graph->col_idx[p];
+      size_t pos_uv = next_sym[u]++;
+      graph->col_idx_sym[pos_uv] = v;
+      size_t pos_vu = next_sym[v]++;
+      graph->col_idx_sym[pos_vu] = u;
+    }
+  }
+
+  free(next_sym);
+  free(deg_sym);
+
+  cxl_flush_range(graph->row_ptr_sym, (num_vertices + 1) * sizeof(size_t));
+  cxl_flush_range(graph->col_idx_sym, sym_edges * sizeof(vid_t));
+
+  graph->is_symmetric = 1;
+}
+
+CXL_Graph* read_graph(const char* filename, int build_symmetric)
 {
   FILE* file = fopen(filename, "r");
   if (!file)
@@ -110,56 +157,12 @@ CXL_Graph* read_graph(const char* filename)
     return graph;
   }
 
-  // Otherwise build symmetric CSR (duplicate edges in reverse).
+  if (!build_symmetric)
   {
-    // compute symmetric degrees
-    size_t sym_edges = edge_idx * 2;
-    size_t* deg_sym = (size_t*)calloc(num_vertices + 1, sizeof(size_t));
-    // srcs and dsts are freed above; re-read edges from graph->col_idx by scanning forward CSR
-    for (vid_t u = 0; u < (vid_t)num_vertices; ++u)
-    {
-      for (size_t p = graph->row_ptr[u]; p < graph->row_ptr[u + 1]; ++p)
-      {
-        vid_t v = graph->col_idx[p];
-        deg_sym[u]++;
-        deg_sym[v]++;
-      }
-    }
-
-    // allocate symmetric CSR
-    graph->row_ptr_sym = (size_t*)cxl_calloc(num_vertices + 1, sizeof(size_t));
-    graph->col_idx_sym = (vid_t*)cxl_malloc(sym_edges * sizeof(vid_t));
-
-    // prefix sum
-    for (vid_t v = 1; v <= (vid_t)num_vertices; ++v)
-    {
-      graph->row_ptr_sym[v] = graph->row_ptr_sym[v - 1] + deg_sym[v - 1];
-    }
-
-    // temporary next positions
-    size_t* next_sym = (size_t*)malloc(num_vertices * sizeof(size_t));
-    memcpy(next_sym, graph->row_ptr_sym, num_vertices * sizeof(size_t));
-
-    for (vid_t u = 0; u < (vid_t)num_vertices; ++u)
-    {
-      for (size_t p = graph->row_ptr[u]; p < graph->row_ptr[u + 1]; ++p)
-      {
-        vid_t v = graph->col_idx[p];
-        size_t pos_uv = next_sym[u]++;
-        graph->col_idx_sym[pos_uv] = v;
-        size_t pos_vu = next_sym[v]++;
-        graph->col_idx_sym[pos_vu] = u;
-      }
-    }
-
-    free(next_sym);
-    free(deg_sym);
-
-    cxl_flush_range(graph->row_ptr_sym, (num_vertices + 1) * sizeof(size_t));
-    cxl_flush_range(graph->col_idx_sym, sym_edges * sizeof(vid_t));
-
-    graph->is_symmetric = 1;
+    return graph;
   }
+
+  build_symmetric_csr(graph, num_vertices, edge_idx);
 
   return graph;
 }
