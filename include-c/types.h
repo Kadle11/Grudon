@@ -3,6 +3,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <sys/mman.h>
 
 #define DAMPING_FACTOR 0.85f
 #define THRESHOLD      1e-5f
