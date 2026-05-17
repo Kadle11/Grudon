@@ -1,4 +1,3 @@
-#include <float.h>
 #include "../include-c/host.h"
 
 int main(int argc, char* argv[])
@@ -14,6 +13,49 @@ int main(int argc, char* argv[])
   ///  Step 1: Initialization
   ///
   /////////////////////////////////////////////////////////////////////////////
+
+  // Shared pool setup (size can be tuned as needed).
+  const size_t pool_size_bytes = 1024ULL * 1024ULL * 1024ULL; // 1 GiB
+  if (cxl_pool_init(pool_size_bytes) != 0)
+  {
+    fprintf(stderr, "Failed to initialize shared pool\n");
+    return EXIT_FAILURE;
+  }
+
+  int sv[2];
+  if (socketpair(AF_UNIX, SOCK_SEQPACKET, 0, sv) != 0)
+  {
+    perror("socketpair");
+    cxl_pool_shutdown();
+    return EXIT_FAILURE;
+  }
+
+  pid_t child = fork();
+  if (child < 0)
+  {
+    perror("fork");
+    close(sv[0]);
+    close(sv[1]);
+    cxl_pool_shutdown();
+    return EXIT_FAILURE;
+  }
+  if (child == 0)
+  {
+    close(sv[0]);
+    cpu_set_t cpuset;
+    sched_getaffinity(0, sizeof(cpu_set_t), &cpuset);
+    CPU_ZERO(&cpuset);
+    CPU_SET(3, &cpuset);
+    sched_setaffinity(0, sizeof(cpu_set_t), &cpuset);
+    (void)device_process_main(sv[1], cxl_pool_base_ptr(), cxl_pool_size_bytes());
+    close(sv[1]);
+    _exit(0);
+  }
+
+  close(sv[1]);
+  (void)cxl_ipc_init(sv[0], cxl_pool_base_ptr());
+  printf("Host PID: %d, Spawned device PID: %d\n", (int)getpid(), (int)child);
+  sched_setaffinity(0, sizeof(cpu_set_t), &(cpu_set_t){ .__bits = {1 << 2} }); // Pin host to CPU 2
 
   // Setting up CXL Graph
   const char* graph_file = argv[1];
@@ -48,6 +90,17 @@ int main(int argc, char* argv[])
   VProp* vprop_mirrors = (VProp*)cxl_malloc(graph->num_vertices * sizeof(VProp));
   uint32_t* frontier_ndp = (uint32_t*)cxl_malloc((mask_size * sizeof(uint32_t)));
 
+  long start_time = clock();
+  FILE* fd_bench = fopen("/tmp/measurement", "w");
+  if (fd_bench)  {
+    fprintf(fd_bench, "1\n");
+    fprintf(fd_bench, "%d\n", child);
+    fclose(fd_bench);
+    sleep(1);
+  } else {
+    fprintf(stderr, "Warning: Could not create benchmark file\n");
+  }
+
   if (strcmp(algorithm, "pr") == 0)
   {
     init_pagerank(graph, vprop_masters, frontier_host);
@@ -77,7 +130,6 @@ int main(int argc, char* argv[])
   ///  Step 2: Run Loop
   ///
   /////////////////////////////////////////////////////////////////////////////
-
   int iteration = 0;
   int opcode = 0;
   switch (algorithm[0])
@@ -131,6 +183,17 @@ int main(int argc, char* argv[])
     iteration++;
   }
 
+  long end_time = clock();
+  double elapsed_sec = ((double)(end_time - start_time)) / CLOCKS_PER_SEC;
+  FILE* fd_end = fopen("/tmp/measurement", "w");
+  if (fd_end)  {
+    fprintf(fd_end, "0\n");
+    fprintf(fd_end, "%d\n", child);
+    fclose(fd_end);
+  } else {
+    fprintf(stderr, "Warning: Could not update benchmark file\n");
+  }
+  printf("Total execution time: %.3f seconds\n", elapsed_sec);
   free(next_frontier);
   if (strcmp(algorithm, "pr") == 0) 
   {
@@ -203,6 +266,9 @@ int main(int argc, char* argv[])
   cxl_free(graph->col_idx);
   cxl_free(graph->out_degree);
   cxl_free(graph);
+
+  close(sv[0]);
+  cxl_pool_shutdown();
 
   return EXIT_SUCCESS;
 }

@@ -1,6 +1,5 @@
 #include "../include-c/device.h"
 
-
 // Atomic-min helper for floats using CAS on the uint32_t bit representation
 static inline void atomic_min_float(float *addr, float val)
 {
@@ -130,4 +129,58 @@ void run_ndp_job(const command_entry_t* cmd)
       break;
     default: printf("Unknown opcode: %d\n", cmd->opcode);
   }
+}
+
+int device_process_main(int sockfd, void* pool_base, size_t pool_size)
+{
+  (void)pool_size;
+  if (cxl_ipc_init(sockfd, pool_base) != 0)
+  {
+    return -1;
+  }
+
+  printf("Device PID: %d (parent %d)\n", (int)getpid(), (int)getppid());
+
+  ipc_msg_t msg;
+  for (;;)
+  {
+    if (ipc_recv_msg(&msg) != 0)
+    {
+      return -1;
+    }
+
+    if (msg.type == IPC_MSG_SIGNAL)
+    {
+      if (msg.payload.sig.signal == SIGTERM || msg.payload.sig.signal == SIGINT)
+      {
+        break;
+      }
+      continue;
+    }
+
+    if (msg.type != IPC_MSG_CMD)
+    {
+      continue;
+    }
+
+    command_entry_t cmd;
+    memset(&cmd, 0, sizeof(cmd));
+    cmd.cid = msg.payload.cmd.cid;
+    cmd.opcode = msg.payload.cmd.opcode;
+    cmd.num_vertices = msg.payload.cmd.num_vertices;
+    cmd.frontier_ndp = (uint32_t*)pool_offset_to_ptr(pool_base, msg.payload.cmd.frontier_off);
+    cmd.vprops_mirror = (VProp*)pool_offset_to_ptr(pool_base, msg.payload.cmd.vprops_off);
+    cmd.graph = (CXL_Graph*)pool_offset_to_ptr(pool_base, msg.payload.cmd.graph_off);
+
+    run_ndp_job(&cmd);
+
+    ipc_msg_t ack;
+    memset(&ack, 0, sizeof(ack));
+    ack.type = IPC_MSG_ACK;
+    ack.payload.ack.cid = cmd.cid;
+    ack.payload.ack.status = 0;
+    ipc_send_msg(&ack);
+  }
+
+  return 0;
 }

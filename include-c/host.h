@@ -1,14 +1,21 @@
 #ifndef HOST_H
 #define HOST_H
-
+#define _GNU_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/time.h>
+#include <time.h>
 #include <limits.h>
+#include <float.h>
+#include <unistd.h>
+#include <sched.h>
 
 #include "device.h"
 #include "types.h"
+#include "../include-c/quicksort.h"
+#include "../include-c/shmem.h"
+#include "../include-c/ipc.h"
 
 #define MAX_ITERATIONS 1000
 
@@ -33,8 +40,5 @@ int apply_updates_pagerank(CXL_Graph* graph, VProp* vprop_masters, uint32_t* fro
 
 // Apply updates to Connected Components vertex properties and determine next frontier
 int apply_updates_connected_components(CXL_Graph* graph, VProp* vprop_masters, uint32_t* frontier_host);
-
-// Quicksort function to sort vertices by PageRank score for final output
-void quicksort(RankPair* arr, size_t count);
 
 #endif  // HOST_H

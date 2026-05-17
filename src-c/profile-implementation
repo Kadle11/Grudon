@@ -1,0 +1,89 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+dry_run=0
+algo=""
+graph_path="../data/soc-LiveJournal1.mtx"
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --dry-run)
+      dry_run=1
+      shift
+      ;;
+    -h|--help)
+      echo "Usage: $0 <algo> [graph_path] [--dry-run]" >&2
+      exit 0
+      ;;
+    *)
+      if [[ -z "$algo" ]]; then
+        algo="$1"
+      elif [[ "$graph_path" == "../data/soc-LiveJournal1.mtx" ]]; then
+        graph_path="$1"
+      else
+        echo "Unexpected arg: $1" >&2
+        exit 1
+      fi
+      shift
+      ;;
+  esac
+done
+
+if [[ -z "$algo" ]]; then
+  echo "Usage: $0 <algo> [graph_path] [--dry-run]" >&2
+  exit 1
+fi
+
+if [[ ! -x "./run_graph_algorithms" ]]; then
+  echo "Error: ./run_graph_algorithms not found or not executable in $(pwd)" >&2
+  exit 1
+fi
+
+output_file="bench_${algo}_run"
+watcher_cores="0,1"
+export GOMP_CPU_AFFINITY="3 4 5 6 7 16 17 18 19 20 21 22 23"
+OMP_NUM_THREADS=16 taskset -c 0,1,2,3 ./run_graph_algorithms "$graph_path" "$algo" &
+bench_pid=$!
+
+# Poll /tmp/measurement every 1 ms until flag is 1 and PIDs are present.
+start_time_ns=$(date +%s%N)
+while true; do
+  if [[ -f /tmp/measurement ]]; then
+    mapfile -t lines < /tmp/measurement
+    flag="${lines[0]:-}"
+    pids_line="${lines[1]:-}"
+    if [[ "$flag" == "1" && -n "$pids_line" ]]; then
+      pids_line="${pids_line// /}"
+      if [[ "$dry_run" -eq 1 ]]; then
+        echo "[dry-run] Would run: sudo perf stat --per-thread -p $pids_line -e cycles,instructions" >&2
+        echo "[dry-run] Would write perf output to: $output_file" >&2
+      else
+        taskset -c "$watcher_cores" bash -c '
+          pids="$1"
+          while true; do
+            if [[ -f /tmp/measurement ]]; then
+              mapfile -t lines < /tmp/measurement
+              flag="${lines[0]:-}"
+              if [[ "$flag" == "0" ]]; then
+                pkill -INT -f "perf stat --per-thread -p $pids" 2>/dev/null || true
+                break
+              fi
+            fi
+            sleep 0.001
+          done
+        ' bash "$pids_line" &
+        watcher_pid=$!
+        timeout 90s sudo perf stat --per-thread -p "$pids_line" -e cycles,instructions 2> "$output_file"
+        if [[ -n "${watcher_pid:-}" ]]; then
+          kill "$watcher_pid" 2>/dev/null || true
+          wait "$watcher_pid" 2>/dev/null || true
+        fi
+      fi
+      break
+    fi
+  fi
+  sleep 0.001
+
+done
+
+wait "$bench_pid" 2>/dev/null || true
