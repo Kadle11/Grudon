@@ -94,7 +94,7 @@ int main(int argc, char* argv[])
   FILE* fd_bench = fopen("/tmp/measurement", "w");
   if (fd_bench)  {
     fprintf(fd_bench, "1\n");
-    fprintf(fd_bench, "%d\n", child);
+    fprintf(fd_bench, "%d,%d\n", child, (int)getpid());
     fclose(fd_bench);
     sleep(1);
   } else {
@@ -188,7 +188,7 @@ int main(int argc, char* argv[])
   FILE* fd_end = fopen("/tmp/measurement", "w");
   if (fd_end)  {
     fprintf(fd_end, "0\n");
-    fprintf(fd_end, "%d\n", child);
+    fprintf(fd_end, "%d,%d\n", child, (int)getpid());
     fclose(fd_end);
   } else {
     fprintf(stderr, "Warning: Could not update benchmark file\n");

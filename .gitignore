@@ -371,3 +371,5 @@ MigrationBackup/
 
 data/
 graphs/
+*.data
+*.data.*

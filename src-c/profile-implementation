@@ -39,7 +39,7 @@ if [[ ! -x "./run_graph_algorithms" ]]; then
   exit 1
 fi
 
-output_file="bench_${algo}_run"
+output_file="bench_${algo}_run.data"
 watcher_cores="0,1"
 export GOMP_CPU_AFFINITY="3 4 5 6 7 16 17 18 19 20 21 22 23"
 OMP_NUM_THREADS=16 taskset -c 0,1,2,3 ./run_graph_algorithms "$graph_path" "$algo" &
@@ -55,8 +55,8 @@ while true; do
     if [[ "$flag" == "1" && -n "$pids_line" ]]; then
       pids_line="${pids_line// /}"
       if [[ "$dry_run" -eq 1 ]]; then
-        echo "[dry-run] Would run: sudo perf stat --per-thread -p $pids_line -e cycles,instructions" >&2
-        echo "[dry-run] Would write perf output to: $output_file" >&2
+        echo "[dry-run] Would run: sudo perf record -o $output_file -g --group -p $pids_line -e 'cycles,instructions'" >&2
+        echo "[dry-run] Would write perf data to: $output_file" >&2
       else
         taskset -c "$watcher_cores" bash -c '
           pids="$1"
@@ -65,7 +65,7 @@ while true; do
               mapfile -t lines < /tmp/measurement
               flag="${lines[0]:-}"
               if [[ "$flag" == "0" ]]; then
-                pkill -INT -f "perf stat --per-thread -p $pids" 2>/dev/null || true
+                pkill -INT -f "perf record .* -p $pids" 2>/dev/null || true
                 break
               fi
             fi
@@ -73,7 +73,7 @@ while true; do
           done
         ' bash "$pids_line" &
         watcher_pid=$!
-        timeout 90s sudo perf stat --per-thread -p "$pids_line" -e cycles,instructions 2> "$output_file"
+        sudo perf record -o "$output_file" -g -p "$pids_line" -e 'cycles,instructions'
         if [[ -n "${watcher_pid:-}" ]]; then
           kill "$watcher_pid" 2>/dev/null || true
           wait "$watcher_pid" 2>/dev/null || true
