@@ -17,7 +17,7 @@
 #include "../include-c/shmem.h"
 #include "../include-c/ipc.h"
 
-#define MAX_ITERATIONS 1000
+#define MAX_ITERATIONS 10000
 
 // Read graph from file and construct CXL_Graph structure.
 // When build_symmetric is non-zero, also materialize reverse edges.

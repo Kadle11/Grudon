@@ -49,55 +49,66 @@ fi
 for run_idx in 1 2 3; do
   echo "Starting run $run_idx/3..."
   output_file="bench_${algo}_${graph_name}_run${run_idx}.data"
-benchmark_cores="3,4,5,6,7,16,17,18,19,20,21,22,23"
-watcher_cores="0"
-perf_cores="1"
-export GOMP_CPU_AFFINITY="3 4 5 6 7 16 17 18 19 20 21 22 23"
-  OMP_NUM_THREADS=16 taskset -c "$benchmark_cores" ./run_graph_algorithms "$graph_path" "$algo" $sym_arg &
+benchmark_core="2"
+perf_core="0"
+measurement_file="./measurement"
+ack_file="./measurement.attached"
+
+  rm -f "$measurement_file" "$ack_file"
+
+  taskset -c "$benchmark_core" env GRUDON_PROFILE=1 ./run_graph_algorithms "$graph_path" "$algo" $sym_arg &
   bench_pid=$!
 
-  # Poll /tmp/measurement every 1 ms until flag is 1 and PIDs are present.
-  start_time_ns=$(date +%s%N)
+cleanup() {
+  rm -f "$ack_file"
+}
+trap cleanup EXIT
+
+  start_ms=$(date +%s%3N)
   while true; do
-    if [[ -f /tmp/measurement ]]; then
-    mapfile -t lines < /tmp/measurement
+  if [[ -f "$measurement_file" ]]; then
+    mapfile -t lines < "$measurement_file"
     flag="${lines[0]:-}"
-    pids_line="${lines[1]:-}"
-    if [[ "$flag" == "1" && -n "$pids_line" ]]; then
-      pids_line="${pids_line// /}"
+    pid_line="${lines[1]:-}"
+    if [[ "$flag" == "1" && -n "$pid_line" ]]; then
       if [[ "$dry_run" -eq 1 ]]; then
-        echo "[dry-run] Would run: taskset -c $perf_cores sudo perf record -o $output_file -g --group -p $pids_line -e 'cycles,instructions'" >&2
+        echo "[dry-run] Would run: taskset -c $perf_core sudo perf record -o $output_file -g -p $pid_line -e 'cycles,instructions'" >&2
         echo "[dry-run] Would write perf data to: $output_file" >&2
+        touch "$ack_file"
+        wait "$bench_pid" 2>/dev/null || true
       else
-        taskset -c "$watcher_cores" bash -c '
-          pids="$1"
-          while true; do
-            if [[ -f /tmp/measurement ]]; then
-              mapfile -t lines < /tmp/measurement
-              flag="${lines[0]:-}"
-              if [[ "$flag" == "0" ]]; then
-                pkill -INT -f "perf record .* -p $pids" 2>/dev/null || true
-                break
-              fi
+        taskset -c "$perf_core" sudo perf record -o "$output_file" -g -p "$pid_line" -e 'cycles,instructions' &
+        perf_pid=$!
+
+        touch "$ack_file"
+
+        while true; do
+          if [[ -f "$measurement_file" ]]; then
+            mapfile -t lines < "$measurement_file"
+            flag="${lines[0]:-}"
+            if [[ "$flag" == "0" ]]; then
+              kill -INT "$perf_pid" 2>/dev/null || true
+              break
             fi
-            sleep 0.001
-          done
-        ' bash "$pids_line" &
-        watcher_pid=$!
-        taskset -c "$perf_cores" sudo perf record -o "$output_file" -g -p "$pids_line" -e 'cycles,instructions'
-        if [[ -n "${watcher_pid:-}" ]]; then
-          kill "$watcher_pid" 2>/dev/null || true
-          wait "$watcher_pid" 2>/dev/null || true
-        fi
+          fi
+          sleep 0.001
+        done
+
+        wait "$perf_pid" 2>/dev/null || true
+        wait "$bench_pid" 2>/dev/null || true
       fi
       break
     fi
   fi
+  now_ms=$(date +%s%3N)
+  if (( now_ms - start_ms > 90000 )); then
+    echo "Error: measurement flag not observed within 30s" >&2
+    kill "$bench_pid" 2>/dev/null || true
+    wait "$bench_pid" 2>/dev/null || true
+    exit 1
+  fi
   sleep 0.001
-
 done
-
-  wait "$bench_pid" 2>/dev/null || true
 
   # Clear file caches to avoid cross-run interference
   if [[ "$dry_run" -eq 1 ]]; then
