@@ -1,7 +1,7 @@
 @startuml
 ' PageRank Phase A - Initialization
 
-title <size:22><b>PageRank Hardware API Mapping</b></size>\n<size:14>Phase A: Initialization</size>
+title <size:22><b>PageRank Hardware API Mapping</b></size>\n<size:14>Host-Driven Initialization</size>
 
 skinparam sequenceMessageAlign center
 skinparam responseMessageBelowArrow true
@@ -32,7 +32,7 @@ skinparam note {
 }
 
 participant "**<color:white>Host (CPU + DRAM)</color>**" as H #A7934B
-participant "**<color:white>CXL Memory Pool + NDP</color>**" as N #4C0099
+participant "**<color:white>CCM (ARM Compute + CXL)</color>**" as N #4C0099
 
 == <size:16><b>Phase A - Initialization</b></size> ==
 group #FDF4D7 Initialization Vector Setup
@@ -41,12 +41,13 @@ note over H
   <b>[VectorOp] Initialization</b>
   <code>
   VertexStateVector[n] = {pr_vals[n], vertex_properties[n]}
-
   VertexStateVector <- {(1 - D), D * (1 - D) / out_deg[n]}
   FrontierVector    <- [1..N]
   UpdateVector      <- [0, 0, ..., 0]
   </code>
 end note
+
+H -> N : **Operation**: PageRank Init Kernel, **Payload**: Data Addrs
 
 note over N
   <b>[VectorOp] Initialization</b>
