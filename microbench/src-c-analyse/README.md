@@ -9,10 +9,10 @@ driver.c ── main(): orchestration mainly: parse args, loop the degree grid,
    │
    ├── cli.c              parse_args: argv to config_t for the sweep (degrees, threads, pin list)
    ├── graph_generator.c  build_csr / build_csc: generate random edges, and build CSR/CSC arrays [needs alloc, flush and free changes here]
-   ├── csr_sweep_push_st.c   PUSH kernel + timer: single-thread scatter style random indirect updates,
-   │                         vprop[col_idx]++, returns TSC cycles (pins core) [needs inner kernel loop changes hereL31-33]
-   ├── csc_sweep_pull_mt.c   PULL kernel + timer: OpenMP gather style random indirect reads,
-   │                         out[v]=Σ vprop[in-nbrs], returns TSC cycles (pins cores) [needs only inner kernel loop changes hereL50-53]
+   ├── csr_sweep_push_st.c   PUSH kernel + timer: single-thread scatter random indirect writes,
+   │                         vprop[indirect-idx]++, returns TSC cycles (pins core) [needs inner kernel loop changes here L31-33]
+   ├── csc_sweep_pull_mt.c   PULL kernel + timer: OpenMP gather random indirect reads,
+   │                         out[v]=Σ vprop[indirect-idx], returns TSC cycles (pins cores) [needs only inner kernel loop changes here L50-53]
    ├── csr_sweep_utils.c  prefault pages, calibrate TSC GHz, memory_guard_ok
    └── csv_writer.c       csv_write_header / csv_write_row: unified result schema
             │
