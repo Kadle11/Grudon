@@ -37,25 +37,20 @@ static void usage(const char *prog) {
             prog);
 }
 
-int parse_args(int argc, char **argv, config_t *cfg) {
-    *cfg = (config_t){0};
-    cfg->V = 61000000;
-    cfg->runs = 5;
-    cfg->seed = 42;
-    cfg->dist_str = "urand";
-    cfg->kernel = "push";
-
-    i64list klist = {0}, tlist = {0}, clist = {0};
-
+// Parses argv into cfg, filling the caller-owned lists. Returns 0 on success
+// (klist/tlist are handed to cfg; clist stays for the caller to free). On
+// failure returns 1, having already printed usage/diagnostics as appropriate.
+static int parse_into(int argc, char **argv, config_t *cfg,
+                      i64list *klist, i64list *tlist, i64list *clist) {
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "-V") == 0 && i + 1 < argc) {
             cfg->V = atoll(argv[++i]);
         } else if (strcmp(argv[i], "-k") == 0 && i + 1 < argc) {
-            list_push(&klist, atoll(argv[++i]));
+            list_push(klist, atoll(argv[++i]));
         } else if (strcmp(argv[i], "-kernel") == 0 && i + 1 < argc) {
             cfg->kernel = argv[++i];
         } else if (strcmp(argv[i], "-t") == 0 && i + 1 < argc) {
-            list_push(&tlist, atoll(argv[++i]));
+            list_push(tlist, atoll(argv[++i]));
         } else if (strcmp(argv[i], "-dist") == 0 && i + 1 < argc) {
             cfg->dist_str = argv[++i];
         } else if (strcmp(argv[i], "-r") == 0 && i + 1 < argc) {
@@ -63,19 +58,23 @@ int parse_args(int argc, char **argv, config_t *cfg) {
         } else if (strcmp(argv[i], "-s") == 0 && i + 1 < argc) {
             cfg->seed = (uint64_t)strtoull(argv[++i], NULL, 10);
         } else if (strcmp(argv[i], "-c") == 0 && i + 1 < argc) {
-            list_push(&clist, atoll(argv[++i]));
+            list_push(clist, atoll(argv[++i]));
         } else if (strcmp(argv[i], "-o") == 0 && i + 1 < argc) {
             cfg->out_path = argv[++i];
         } else {
-            goto fail;
+            usage(argv[0]);
+            return 1;
         }
     }
 
-    if (cfg->V <= 0 || cfg->runs <= 0) goto fail;
+    if (cfg->V <= 0 || cfg->runs <= 0) {
+        usage(argv[0]);
+        return 1;
+    }
 
     if (strcmp(cfg->dist_str, "urand") != 0) {
         fprintf(stderr, "-dist '%s' not supported yet: only \"urand\"\n", cfg->dist_str);
-        goto fail_quiet;
+        return 1;
     }
     cfg->dist = DIST_URAND;
 
@@ -85,51 +84,62 @@ int parse_args(int argc, char **argv, config_t *cfg) {
         cfg->pull = 1;
     } else {
         fprintf(stderr, "-kernel '%s' invalid: use \"push\" or \"pull\"\n", cfg->kernel);
-        goto fail_quiet;
+        return 1;
     }
 
-    if (klist.len == 0) {
+    if (klist->len == 0) {
         long long defaults[] = {1, 2, 4, 8, 16, 24, 32};
         for (size_t i = 0; i < sizeof(defaults) / sizeof(defaults[0]); i++)
-            list_push(&klist, defaults[i]);
+            list_push(klist, defaults[i]);
     }
-    for (size_t i = 0; i < klist.len; i++) {
-        if (klist.vals[i] <= 0) {
+    for (size_t i = 0; i < klist->len; i++) {
+        if (klist->vals[i] <= 0) {
             fprintf(stderr, "-k avg_degree must be > 0\n");
-            goto fail_quiet;
+            return 1;
         }
     }
 
-    if (cfg->pull && tlist.len == 0) list_push(&tlist, 1);
-    for (size_t i = 0; i < tlist.len; i++) {
-        if (tlist.vals[i] <= 0) {
+    if (cfg->pull && tlist->len == 0) list_push(tlist, 1);
+    for (size_t i = 0; i < tlist->len; i++) {
+        if (tlist->vals[i] <= 0) {
             fprintf(stderr, "-t threads must be > 0\n");
-            goto fail_quiet;
+            return 1;
         }
     }
 
-    cfg->degrees = klist.vals;
-    cfg->ndeg = klist.len;
-    cfg->threads = tlist.vals;
-    cfg->nthr = tlist.len;
+    cfg->degrees = klist->vals;
+    cfg->ndeg = klist->len;
+    cfg->threads = tlist->vals;
+    cfg->nthr = tlist->len;
 
-    cfg->ncpu = (int)clist.len;
+    cfg->ncpu = (int)clist->len;
     if (cfg->ncpu > 0) {
         cfg->cpus = malloc((size_t)cfg->ncpu * sizeof(int));
-        for (int i = 0; i < cfg->ncpu; i++) cfg->cpus[i] = (int)clist.vals[i];
+        for (int i = 0; i < cfg->ncpu; i++) cfg->cpus[i] = (int)clist->vals[i];
     }
     cfg->push_cpu = cfg->ncpu > 0 ? cfg->cpus[0] : -1;
-    free(clist.vals);
 
     return 0;
+}
 
-fail:
-    usage(argv[0]);
-fail_quiet:
-    free(klist.vals);
-    free(tlist.vals);
+int parse_args(int argc, char **argv, config_t *cfg) {
+    *cfg = (config_t){0};
+    cfg->V = 61000000;
+    cfg->runs = 5;
+    cfg->seed = 42;
+    cfg->dist_str = "urand";
+    cfg->kernel = "push";
+
+    i64list klist = {0}, tlist = {0}, clist = {0};
+    int rc = parse_into(argc, argv, cfg, &klist, &tlist, &clist);
+
     free(clist.vals);
-    return 1;
+    if (rc != 0) {
+        free(klist.vals);
+        free(tlist.vals);
+        return 1;
+    }
+    return 0;
 }
 
 void config_free(config_t *cfg) {
