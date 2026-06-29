@@ -5,13 +5,12 @@
 #   V        = 61,578,415  (GAP-twitter vertex count)
 #   kernel   = push (CSR scatter: vprop[col_idx]++)
 #   thread   = 1, pinned to core 0 (NUMA node 0)
-#   degree   = 1,2,4,8,16,24,32,64
+#   degree   = 1,2,4,8,16,24,32
 #
 # Same degree cap as the pull sweeper: edge count V*degree must stay under 4B
 # because row_ptr/col_ptr are uint32_t. At V=61.5M, k=64 -> 3.94B edges (< 4B,
 # the top point); k=128 -> 7.9B would overflow. Wrapped in numactl --membind=0
-# so vprop is local to the pinned core's node. k=64 transiently allocates
-# ~63 GB of edge buffers (the driver's memory guard skips points that won't fit).
+# so vprop is local to the pinned core's node. 
 set -euo pipefail
 cd "$(dirname "$0")"
 

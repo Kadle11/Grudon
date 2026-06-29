@@ -4,7 +4,7 @@
 #   V        = 61,578,415  (GAP-twitter vertex count)
 #   kernel   = pull (CSC gather: out[v] = sum vprop[in-neighbours])
 #   threads  = 16, pinned to physical cores 0,2,...,30
-#   degree   = 1,2,4,8,16,24,32,64
+#   degree   = 1,2,4,8,16,24,32
 #
 # Degree cap: edge count V*degree must stay under 4B because row_ptr/col_ptr
 # are uint32_t. At V=61.5M, k=64 -> 3.94B edges (< 4B, the top point); k=128 ->
@@ -14,17 +14,48 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-make driver >/dev/null
-
 V=61578415
 THREADS=16
 RUNS=5
 SEED=42
-OUT="${1:-results/csc_pull_twitter_scale_t_${THREADS}.csv}"
+
+usage() {
+    cat <<EOF
+usage: $(basename "$0") [-p|--pin] [-o|--output FILE]
+
+  -p, --pin           pin ${THREADS} threads to physical cores 0,2,...,30
+  -o, --output FILE   write results to FILE
+                      (default: results/csc_pull_twitter_scale_t_${THREADS}.csv)
+  -h, --help          show this help
+EOF
+}
+
+PIN=0
+OUT=""
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -p | --pin) PIN=1 ;;
+        -o | --output)
+            OUT="$2"
+            shift
+            ;;
+        -h | --help)
+            usage
+            exit 0
+            ;;
+        *) OUT="$1" ;;
+    esac
+    shift
+done
+OUT="${OUT:-results/csc_pull_twitter_scale_t_${THREADS}.csv}"
+
+make driver >/dev/null
 
 # 16 physical cores on NUMA node 0: 0,2,4,...,30
 CPUS=()
-for ((c = 0; c < 32; c += 2)); do CPUS+=(-c "$c"); done
+if ((PIN)); then
+    for ((c = 0; c < 32; c += 2)); do CPUS+=(-c "$c"); done
+fi
 
 KS=(-k 1 -k 2 -k 4 -k 8 -k 16 -k 24 -k 32)
 
