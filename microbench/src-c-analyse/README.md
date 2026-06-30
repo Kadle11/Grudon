@@ -7,12 +7,12 @@ driver.c ── main(): orchestration mainly: parse args, loop the degree grid,
    │                check the memory guard, build the graph, call the
    │                kernel's timer, emit one CSV row per run
    │
-   ├── cli.c              parse_args: argv to config_t for the sweep (degrees, threads, pin list)
-   ├── graph_generator.c  build_csr / build_csc: generate random edges, and build CSR/CSC arrays [needs alloc, flush and free changes here]
-   ├── csr_sweep_push_st.c   PUSH kernel + timer: single-thread scatter random indirect writes,
-   │                         vprop[indirect-idx]++, returns TSC cycles (pins core) [needs inner kernel loop changes here L31-33]
-   ├── csc_sweep_pull_mt.c   PULL kernel + timer: OpenMP gather random indirect reads,
-   │                         out[v]=Σ vprop[indirect-idx], returns TSC cycles (pins cores) [needs only inner kernel loop changes here L50-53]
+   ├── cli.c                              parse_args: argv to config_t for the sweep (degrees, threads, pin list)
+   ├── graph_generator.c [MODS NEEDED]    build_csr / build_csc: generate random edges, and build CSR/CSC arrays [Mods: Accelerator-specific alloc, flush and free]
+   ├── csr_sweep_push_st.c [MODS NEEDED]  PUSH kernel + timer: single-thread scatter random indirect writes,
+   │                                      vprop[indirect-idx]++, returns TSC cycles (pins core) [Mods: Accelerator-specific indirect access functions (L31-33)]
+   ├── csc_sweep_pull_mt.c [MODS NEEDED]  PULL kernel + timer: OpenMP gather random indirect reads,
+   │                                      out[v]=Σ vprop[indirect-idx], returns TSC cycles (pins cores) [Mods: Accelerator-specific indirect access functions (L50-53)]
    ├── csr_sweep_utils.c  prefault pages, calibrate TSC GHz, memory_guard_ok
    └── csv_writer.c       csv_write_header / csv_write_row: unified result schema
             │
@@ -20,7 +20,7 @@ driver.c ── main(): orchestration mainly: parse args, loop the degree grid,
                   included by all .c files
 ```
 
-## Usage
+## Build
 
 Once the changes are done, we can use the `Makefile` to build the benchmark
 
@@ -28,9 +28,7 @@ Once the changes are done, we can use the `Makefile` to build the benchmark
 make -j4
 ```
 
-Then there are two ways to go about using the sweep benchmark, CLI and helper scripts
-
-### CLI
+## CLI
 
 Run `./driver` directly. One invocation sweeps **one** kernel (`-kernel push` or `-kernel pull`) over the `-k` avg-degree grid at fixed `-V`, timing `-r` runs per point and writing a CSV to stdout (or `-o`).
 
@@ -62,9 +60,10 @@ To bind to specific numa nodes, we would have to use
 numactl --cpunodebind=X --membind=X ./driver ...
 ```
 
-### Helper scripts
+## Helper scripts
 
-Both wrap `driver` at **GAP-twitter scale** and run under `numactl --cpunodebind=0 --membind=0` to keep memory node-local. Each builds the driver first and writes a CSV under `results/`.
+Wrapper around `driver` to benchmark computations for **Billion-scale graphs**.
+Driver is run with `numactl --cpunodebind=0 --membind=0` to keep memory node-local. Each script builds the driver and writes a CSV in the `results/` directory.
 
 ```bash
 # serial push baseline
@@ -88,8 +87,9 @@ Defaults per mode:
 
 ## Results
 
-This benchmark is representative of a floor for the observed pagerank stable state for a given device, and we expect to see the csvs show something similar to this example for pull_csc_sweep
+The benchmark will be used to estimate the lower bound of expected speedup using the accelerator. The results are used to compute TEPS (traversed edges per second) and total kernel time as the number of edges processed increase.
 ```csv
+# Example CSV: Pull_CSC_Sweep
 V,avg_degree,dist,kernel,threads,actual_E,run_idx,seed,cycles,ns,ns_per_access
 61578415,1,urand,pull,16,61578415,0,42,191014294,73639785.230,1.195870
 61578415,1,urand,pull,16,61578415,1,42,184658664,71189564.263,1.156080
@@ -104,7 +104,6 @@ V,avg_degree,dist,kernel,threads,actual_E,run_idx,seed,cycles,ns,ns_per_access
 61578415,4,urand,pull,16,246313645,0,42,551854584,212750848.081,0.863740
 ...
 ```
-We would then group by averages of each run and plot total_ns (y axis) vs avg_degree (y axis), Traversed edges per second (TEPS) vs avg_degree(x axis), and then compare two platforms to see how they perform
 
 Example plots for the pull/CSC t16 sweep above — throughput (TEPS) and total kernel time:
 
@@ -114,9 +113,9 @@ Example plots for the pull/CSC t16 sweep above — throughput (TEPS) and total k
 
 ## What does the code do
 
-This code generates a uniform random graph (directed) with given Vertices `V`, edges `actual_E` (based on removal of self loops and parallel edges from the randomly generated graph) and avg_degree `k`, then runs a sweep across all the edges by two methods :-
+This code generates a uniform random graph (directed) with given Vertices `V`, edges `actual_E` (based on removal of self loops and parallel edges from the randomly generated graph) and avg_degree `k`, then runs a sweep across all the edges by two methods:
 
-1. Single threaded push style sweep which would involve an indirect random read and write
-2. Multi threaded pull style sweep which would involve an indirect random read.
+1. Single-threaded push-style [Indirect random reads and writes].
+2. Multi-threaded pull-style [Indirect random reads].
 
-This sweep is performed `r` times, while the time around the sweeps are recorded and then is reported in a csv, which will be used for analysis
+This sweep is performed `r` times, while the time around the sweeps is recorded and reported in the csv.
