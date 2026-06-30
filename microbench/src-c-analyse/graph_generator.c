@@ -41,7 +41,7 @@ static uint64_t generate_edges_urand(uint64_t *edges, uint64_t e_nominal, int64_
 // 4 even passes the sorted data is back in `edges`, which is the pointer
 // returned.
 static uint64_t *radix_sort_edges(uint64_t *edges, uint64_t *scratch, uint64_t n) {
-    uint64_t *count = malloc(65536 * sizeof(uint64_t));
+    uint64_t *count = malloc(65536 * sizeof(uint64_t)); // Allocation change might be required here
     uint64_t *src = edges, *dst = scratch;
     for (int shift = 0; shift < 64; shift += 16) {
         memset(count, 0, 65536 * sizeof(uint64_t));
@@ -102,10 +102,10 @@ static uint64_t build_compressed(uint64_t *edges, uint64_t m, int64_t V,
     uint64_t E = sort_and_dedup_edges(edges, scratch, m);
     free(scratch);
 
-    uint32_t *idx = malloc((size_t)E * sizeof(uint32_t));
+    uint32_t *idx = malloc((size_t)E * sizeof(uint32_t)); // Allocation change might be required here
     for (uint64_t k = 0; k < E; k++) idx[k] = (uint32_t)edges[k];
 
-    uint32_t *ptr = malloc((size_t)(V + 1) * sizeof(uint32_t));
+    uint32_t *ptr = malloc((size_t)(V + 1) * sizeof(uint32_t)); // Allocation change might be required here
     uint64_t pos = 0;
     for (int64_t key = 0; key < V; key++) {
         ptr[key] = (uint32_t)pos;
@@ -133,9 +133,9 @@ static csr_graph_t build_csr_from_edges(uint64_t *edges, uint64_t n, int64_t V,
     g.V = V;
     g.actual_E = build_compressed(edges, m, V, &g.row_ptr, &g.col_idx);
 
-    g.outdeg = malloc((size_t)V * sizeof(uint32_t));
+    g.outdeg = malloc((size_t)V * sizeof(uint32_t)); // Allocation change might be required here
     for (int64_t v = 0; v < V; v++) g.outdeg[v] = g.row_ptr[v + 1] - g.row_ptr[v];
-    g.indeg = calloc((size_t)V, sizeof(uint32_t));
+    g.indeg = calloc((size_t)V, sizeof(uint32_t)); // Allocation change might be required here
     for (uint64_t k = 0; k < g.actual_E; k++) g.indeg[g.col_idx[k]]++;
 
     return g;
@@ -163,9 +163,9 @@ static csc_graph_t build_csc_from_edges(uint64_t *edges, uint64_t n, int64_t V,
     g.V = V;
     g.actual_E = build_compressed(edges, m, V, &g.col_ptr, &g.row_idx);
 
-    g.indeg = malloc((size_t)V * sizeof(uint32_t));
+    g.indeg = malloc((size_t)V * sizeof(uint32_t)); // Allocation change might be required here
     for (int64_t v = 0; v < V; v++) g.indeg[v] = g.col_ptr[v + 1] - g.col_ptr[v];
-    g.outdeg = calloc((size_t)V, sizeof(uint32_t));
+    g.outdeg = calloc((size_t)V, sizeof(uint32_t)); // Allocation change might be required here
     for (uint64_t k = 0; k < g.actual_E; k++) g.outdeg[g.row_idx[k]]++;
 
     return g;
@@ -188,7 +188,7 @@ csr_graph_t build_csr(int64_t V, uint64_t avg_degree, bool undirected,
                       dist_t dist, uint64_t *rng_state) {
     uint64_t e_nominal = (uint64_t)V * avg_degree;
     uint64_t cap = undirected ? 2 * e_nominal : e_nominal;
-    uint64_t *edges = malloc(cap * sizeof(uint64_t));
+    uint64_t *edges = malloc(cap * sizeof(uint64_t)); // Allocation change might be required here
     uint64_t n = generate_edges(edges, e_nominal, V, dist, rng_state);
     csr_graph_t g = build_csr_from_edges(edges, n, V, undirected, dist);
     free(edges);
@@ -199,13 +199,14 @@ csc_graph_t build_csc(int64_t V, uint64_t avg_degree, bool undirected,
                       dist_t dist, uint64_t *rng_state) {
     uint64_t e_nominal = (uint64_t)V * avg_degree;
     uint64_t cap = undirected ? 2 * e_nominal : e_nominal;
-    uint64_t *edges = malloc(cap * sizeof(uint64_t));
+    uint64_t *edges = malloc(cap * sizeof(uint64_t)); // Allocation change might be required here
     uint64_t n = generate_edges(edges, e_nominal, V, dist, rng_state);
     csc_graph_t g = build_csc_from_edges(edges, n, V, undirected, dist);
     free(edges);
     return g;
 }
 
+// Allocator specific free functions for CSR and CSC graphs. These free the internal arrays
 void free_csr_graph(csr_graph_t *g) {
     free(g->row_ptr);
     free(g->col_idx);
